@@ -8,11 +8,27 @@ objects, VACE conditioning and sampler, instead of vendoring DiffSynth-Studio.
 
 ## Status
 
-This node pack has been unit-tested (mask detection, log-curve math, LoRA patching, EXR I/O, node
-schemas, ...) against oracle values from the reference implementation, and the ComfyUI-facing code
-has been smoke-tested against a local, model-free ComfyUI instance. **GPU validation against the
-reference implementation is in progress** — no end-to-end runs against real weights, no
-performance/VRAM numbers and no parity claims are made yet.
+Validated end-to-end against the reference implementation on an NVIDIA A100 80GB PCIe, using
+byte-identical pre-sized inputs and the reference default of 50 sampling steps on both sides.
+
+| Case | Mask IoU vs reference mask code | Log-space PSNR outside the mask | Reference's own seed-to-seed PSNR |
+|---|---|---|---|
+| Single image (1280×720) | 1.000000 | **57.8 dB** | 47.0 dB |
+| Video, 33 frames (1280×720) | 1.000000 | **59.1 dB** | 42.1 dB |
+| Long video, 65 frames, 3 blended windows | 1.000000 | **53.4 dB** | 33.2 dB |
+| HDRI panorama (2048×1024) | 1.000000 | **51.1 dB** | — |
+
+In every case the output is *closer to the reference* than two runs of the reference itself (with
+different seeds) are to each other, and the exposure masks are bit-identical to the reference
+algorithm. Inside the reconstructed (masked) region the robust highlight statistics agree closely
+— e.g. for the 33-frame video p99.9 luminance 3.82 vs 3.72 and mean log value 0.4004 vs 0.3995 —
+while the single brightest pixel is not a meaningful comparison, because the reference's own two
+seeds differ on it by a factor of ~4 (p99.9 of 3.72 vs 13.65 between reference seeds 10 and 11).
+
+Also verified on real weights: the DiffHDR LoRA downloads from a clean install and applies exactly
+80 patches for both variants; the float32 VAE working copy really is float32 in all 194 parameters
+(the checkpoint otherwise loads as bfloat16); and the sampler schedule matches the reference's
+`linspace(1, 0, N+1)[:-1]` with shift 5 to within 6e-8 at 50, 20 and 10 steps.
 
 ## What it is
 
@@ -42,17 +58,24 @@ workflow; the DiffHDR LoRA is downloaded automatically on first use.
 | Wan2.1 VACE 14B | `wan2.1_vace_14B_fp16.safetensors` | [`Comfy-Org/Wan_2.1_ComfyUI_repackaged`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/diffusion_models) (`split_files/diffusion_models/`) | `models/diffusion_models` |
 | Wan2.1 VACE 14B GGUF (low memory / Apple Silicon) | e.g. `Wan2.1_14B_VACE-Q4_K_M.gguf`, `Q5_K_M`, `Q8_0` | [`QuantStack/Wan2.1_14B_VACE-GGUF`](https://huggingface.co/QuantStack/Wan2.1_14B_VACE-GGUF) — requires the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom node (`UnetLoaderGGUF` in place of `UNETLoader`) | `models/diffusion_models` |
 | Wan 2.1 VAE | `wan_2.1_vae.safetensors` | same Comfy-Org repo ([`split_files/vae/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/vae)) | `models/vae` |
-| umT5-xxl (required for now, see below) | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | same Comfy-Org repo ([`split_files/text_encoders/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/text_encoders)) | `models/text_encoders` |
+| umT5-xxl (**optional** — only for custom prompts, see below) | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | same Comfy-Org repo ([`split_files/text_encoders/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/text_encoders)) | `models/text_encoders` |
 | DiffHDR LoRAs | `DiffHDR.safetensors` (image/video), `DiffHDR_Pano.safetensors` (HDRI) | [`ZhengmingYu/DiffHDR`](https://huggingface.co/ZhengmingYu/DiffHDR) — downloaded automatically | `models/loras/DiffHDR` |
 
-All filenames above were verified against the current file listing of each Hugging Face repository.
+All filenames above were verified against the current file listing of each Hugging Face repository,
+and every one of them was downloaded and run end-to-end during GPU validation.
 
-**About the CLIP input**: DiffHDR was trained with an empty prompt for images/video and a fixed
-prompt for panoramas, so the `DiffHDR (Image / Video)` and `DiffHDR HDRI (Panorama)` nodes are
-meant to run with those exact embeddings bundled into the pack and no CLIP model loaded at all.
-Those bundled embeddings have not shipped yet — **until they do, connect a umT5-xxl CLIP input**
-(`CLIPLoader`, type `wan`) to these nodes; leaving `clip` unconnected will fail with a clear error
-telling you to do so. This note will be updated once the bundled embeddings ship.
+**About the CLIP input — optional**: DiffHDR was trained with an empty prompt for images/video and
+a fixed prompt for panoramas, so both all-in-one nodes ship with exactly those embeddings baked in
+(`assets/embeds/`) and run with **no CLIP model loaded at all**. Leave `clip` unconnected and you
+save the ~11 GB umT5-xxl download and its load time; the `prompt` widget is then ignored.
+
+The bundled embeddings were produced with ComfyUI's own umT5-xxl encoder (`scripts/make_embeds.py`)
+and verified on the GPU: cosine similarity against the DiffSynth prompter output used by the
+reference implementation is 0.999997 (empty prompt) and 0.99982 (panorama prompt) — closer than the
+reference's own bfloat16 GPU run is to its float32 run (0.99987 / 0.99953). A 33-frame video
+reconstructed with the bundled embeddings matches the same run with a live `CLIPLoader` at
+**85.5 dB** log-space PSNR. Connect a umT5-xxl CLIP (`CLIPLoader`, type `wan`) only if you want to
+experiment with your own prompts.
 
 ## Installation
 
@@ -159,6 +182,56 @@ match whatever you actually have installed if you used the GGUF or a different p
   tonemap / preview. Use this as a starting point when you need to combine DiffHDR with other VACE
   controls or additional LoRAs, since every step is a separate node instead of one bundled node.
 
+## Performance
+
+Measured on an **NVIDIA A100 80GB PCIe** (CUDA 12.8, PyTorch 2.8, ComfyUI 0.36.0), bf16
+`wan2.1_vace_14B_fp16.safetensors` with the float32 VAE, PyTorch SDPA attention, at 1280×720.
+"Warm" means the model was already resident in the ComfyUI process; the first run after a restart
+additionally pays a **153 s** model load (measured: 591 s cold vs 438 s warm for the same job).
+
+| Mode | Steps | Output frames | Warm wall time | s / output frame | Peak VRAM |
+|---|---|---|---|---|---|
+| Image (720p) | 50 | 1 | 636 s | 636 | 62.9 GB |
+| Image (720p) | 10 | 1 | 150 s | 150 | 62.9 GB |
+| Video, 33 frames (720p) | 50 | 33 | 935 s | 28.3 | 63.5 GB |
+| Video, 33 frames (720p) | 20 | 33 | 575 s | 17.4 | 62.2 GB |
+| Video, 33 frames (720p) | 10 | 33 | 438 s | 13.3 | 64.2 GB |
+| Long video, 65 frames, 3 windows | 50 | 65 | 2701 s (900 s / window) | 41.6 | 64.6 GB |
+| HDRI panorama 2048×1024 | 50 | 1 | 115 s | 115 | 49.0 GB |
+
+Quantised base models, 33-frame video at 20 steps:
+
+| Base model | Warm wall time | Peak VRAM | Log-space PSNR vs bf16 |
+|---|---|---|---|
+| bf16 `wan2.1_vace_14B_fp16.safetensors` | 575 s | 62.2 GB | — |
+| `weight_dtype = fp8_e4m3fn` (same file) | 684 s | **47.2 GB** | 41.2 dB |
+| GGUF `Wan2.1_14B_VACE-Q4_K_M.gguf` | 605 s | **41.0 GB** | 40.7 dB |
+
+Attention backends produce the same result: `auto` and `flash_attn` are both within **85.6 dB** of
+`sdpa` (`auto` selects flash-attn when it is importable). flash-attn was the fastest at 530 s for
+the 20-step video versus 575 s for SDPA.
+
+Two notes on where the time goes. Image mode is much cheaper per run than a 33-frame video at the
+same step count (150 s vs 438 s at 10 steps) even though both sample the same ~32 400 tokens,
+because the per-frame exposure-mask stabilisation runs once instead of 33 times. And the sampler
+itself costs about 12 s/step at 720p×33 frames, so a 33-frame job has roughly 300 s of fixed cost
+(masking, two VAE encodes and one decode, all in float32) on top of `12 s × steps`.
+
+The reference implementation's own timings on the same GPU and inputs were 1185 s (image), 994 s
+(33-frame video), 3579 s (65-frame long video) and 592 s (panorama) — but each of those is a fresh
+process that loads the 14B model from scratch every time (~270-400 s of the total), so they are not
+directly comparable to the warm numbers above.
+
+### How many steps?
+
+- **50 steps** reproduces the published setting and is what the parity numbers above were measured at.
+- **20 steps** is the best speed/quality trade-off: 40 % faster, and the reconstructed highlights
+  stay within ~4 % of the 50-step result (masked p99.9 luminance 3.98 vs 3.82) at 47 dB masked PSNR.
+  It is still closer to the 50-step reference than two reference seeds are to each other.
+- **10 steps** is fine for previews and for finding a seed, but it does *not* reconstruct the same
+  amount of highlight energy: on the test image the masked p99.9 luminance drops from 8.87 to 5.61
+  (−37 %) and the peak from 15.0 to 6.4. Use it to iterate, then re-run the keeper at 20 or 50.
+
 ## Platform notes
 
 - **CUDA**: `attention=auto` prefers flash-attn, then SageAttention, then ComfyUI's own default
@@ -199,7 +272,7 @@ match whatever you actually have installed if you used the GGUF or a different p
   and the default `window_size=33` match that training distribution most closely. Other sizes and
   window lengths work but are extrapolating beyond the training distribution.
 - `window_size` must be `4n+1`; `window_stride` must be smaller than `window_size`.
-- No performance, VRAM or timing numbers are published here — see Status.
+- The published numbers were measured on a single A100 80GB PCIe; other GPUs will differ.
 - The Windows GPU path is untested.
 
 ## Credits & License
