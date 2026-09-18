@@ -3,7 +3,7 @@
 import comfy.utils
 from comfy_api.latest import io
 
-from .. import backend, embeddings, frames, pipeline, sampling
+from .. import backend, embeddings, frames, pipeline, sampling, timing
 from .. import vae as dvae
 from . import common
 
@@ -35,15 +35,20 @@ class DiffHDRPano(io.ComfyNode):
     @classmethod
     def execute(cls, model, vae, image, prompt, width, height, steps, seed, attention, vae_precision,
                 clip=None, mask=None) -> io.NodeOutput:
-        dvae.check_wan_vae(vae)
-        h, w = frames.resolve_size(image.shape[1], image.shape[2], "custom", height, width)
-        image = frames.fit(image[:1, ..., :3], h, w, crop=False)
-        if mask is not None:
-            mask = frames.fit_mask(mask if mask.dim() == 3 else mask[None], h, w, crop=False)
+        timer = timing.StageTimer()
+        with timer.stage("prepare"):
+            dvae.check_wan_vae(vae)
+            h, w = frames.resolve_size(image.shape[1], image.shape[2], "custom", height, width)
+            image = frames.fit(image[:1, ..., :3], h, w, crop=False)
+            if mask is not None:
+                mask = frames.fit_mask(mask if mask.dim() == 3 else mask[None], h, w, crop=False)
         pbar = comfy.utils.ProgressBar(steps)
-        positive, negative = embeddings.get_conditioning(clip, prompt, "pano")
-        patched = sampling.prepare_model(model, "pano", attention)
+        with timer.stage("conditioning"):
+            positive, negative = embeddings.get_conditioning(clip, prompt, "pano")
+        with timer.stage("model_patch"):
+            patched = sampling.prepare_model(model, "pano", attention)
         window_fn = backend.make_window_fn(patched, dvae.get_vae(vae, vae_precision), positive, negative,
-                                           steps, seed, on_step=lambda: pbar.update(1))
-        result = pipeline.run_pano(image, window_fn, user_mask=mask)
+                                           steps, seed, on_step=lambda: pbar.update(1), timer=timer)
+        result = pipeline.run_pano(image, window_fn, user_mask=mask, timer=timer)
+        timing.log_timing(timing.node_context("pano", 1, 1, steps), timer)
         return io.NodeOutput(result.hdr, result.mask)

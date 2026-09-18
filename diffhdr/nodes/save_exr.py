@@ -5,7 +5,7 @@ from pathlib import Path
 import folder_paths
 from comfy_api.latest import io, ui
 
-from .. import color, exr
+from .. import color, exr, timing
 from . import common
 
 
@@ -44,12 +44,19 @@ class DiffHDRSaveEXR(io.ComfyNode):
         while count > 1 and (Path(folder) / f"{name}_{counter:05d}").exists():
             counter += 1  # get_save_image_path only counts files, not sequence folders
         paths = exr.sequence_paths(Path(folder), name, counter, count, start_frame, format)
-        for image, path in zip(images, paths):
-            if format == "hdr":
-                exr.write_hdr(path, image)
-            else:
-                exr.write_exr(path, image, bit_depth=bit_depth, compression=compression,
-                              dwa_level=dwa_compression_level, colorspace=colorspace)
-        picks = sorted({0, count // 2, count - 1})
-        preview = color.tonemap(images[picks], preview_exposure, "reinhard")
-        return io.NodeOutput(ui=ui.PreviewImage(preview, cls=cls))
+        timer = timing.StageTimer()
+        with timer.stage("write"):
+            for image, path in zip(images, paths):
+                if format == "hdr":
+                    exr.write_hdr(path, image)
+                else:
+                    exr.write_exr(path, image, bit_depth=bit_depth, compression=compression,
+                                  dwa_level=dwa_compression_level, colorspace=colorspace)
+        with timer.stage("preview"):
+            picks = sorted({0, count // 2, count - 1})
+            preview = color.tonemap(images[picks], preview_exposure, "reinhard")
+            output = io.NodeOutput(ui=ui.PreviewImage(preview, cls=cls))
+        flavour = "hdr" if format == "hdr" else f"exr/{bit_depth}/{compression}"
+        plural = "" if count == 1 else "s"
+        timing.log_timing(f"save_exr, {count} frame{plural}, {flavour}", timer)
+        return output

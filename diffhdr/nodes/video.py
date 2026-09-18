@@ -3,7 +3,7 @@
 import comfy.utils
 from comfy_api.latest import io
 
-from .. import backend, embeddings, frames, pipeline, sampling, windows
+from .. import backend, embeddings, frames, pipeline, sampling, timing, windows
 from .. import vae as dvae
 from . import common
 
@@ -44,26 +44,31 @@ class DiffHDRVideo(io.ComfyNode):
     def execute(cls, model, vae, images, prompt, reference_ev, resize_mode, width, height, steps, seed,
                 mask_overexposed, mask_underexposed, window_size, window_stride, use_prev_window_reference,
                 attention, vae_precision, clip=None, mask=None, reference_image=None) -> io.NodeOutput:
-        dvae.check_wan_vae(vae)
-        images = images[..., :3]
-        h, w = frames.resolve_size(images.shape[1], images.shape[2], resize_mode, height, width)
-        images = frames.fit(images, h, w, crop=True)
-        if mask is not None:
-            mask = frames.fit_mask(mask if mask.dim() == 3 else mask[None], h, w, crop=True)
-        if reference_image is not None:
-            reference_image = frames.fit(reference_image[:1, ..., :3], h, w, crop=True)
+        timer = timing.StageTimer()
+        with timer.stage("prepare"):
+            dvae.check_wan_vae(vae)
+            images = images[..., :3]
+            h, w = frames.resolve_size(images.shape[1], images.shape[2], resize_mode, height, width)
+            images = frames.fit(images, h, w, crop=True)
+            if mask is not None:
+                mask = frames.fit_mask(mask if mask.dim() == 3 else mask[None], h, w, crop=True)
+            if reference_image is not None:
+                reference_image = frames.fit(reference_image[:1, ..., :3], h, w, crop=True)
 
         total = images.shape[0]
         size = frames.snap_4n1(window_size)
         n_windows = 1 if total <= size else len(windows.plan_windows(total, size, window_stride))
         pbar = comfy.utils.ProgressBar(n_windows * steps)
 
-        positive, negative = embeddings.get_conditioning(clip, prompt, "standard")
-        patched = sampling.prepare_model(model, "standard", attention)
+        with timer.stage("conditioning"):
+            positive, negative = embeddings.get_conditioning(clip, prompt, "standard")
+        with timer.stage("model_patch"):
+            patched = sampling.prepare_model(model, "standard", attention)
         window_fn = backend.make_window_fn(patched, dvae.get_vae(vae, vae_precision), positive, negative,
-                                           steps, seed, on_step=lambda: pbar.update(1))
+                                           steps, seed, on_step=lambda: pbar.update(1), timer=timer)
         result = pipeline.run_video(images, window_fn, user_mask=mask, mask_overexposed=mask_overexposed,
                                     mask_underexposed=mask_underexposed, reference=reference_image,
                                     reference_ev=reference_ev, window_size=size, window_stride=window_stride,
-                                    use_prev_window_reference=use_prev_window_reference)
+                                    use_prev_window_reference=use_prev_window_reference, timer=timer)
+        timing.log_timing(timing.node_context("image" if total == 1 else "video", total, n_windows, steps), timer)
         return io.NodeOutput(result.hdr, result.mask)
