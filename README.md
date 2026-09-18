@@ -56,7 +56,8 @@ telling you to do so. This note will be updated once the bundled embeddings ship
 
 ## Installation
 
-1. Clone or copy this repository into `ComfyUI/custom_nodes/ComfyUI-DiffHDR`.
+1. Clone this repository into `ComfyUI/custom_nodes/ComfyUI-DiffHDR`:
+   `git clone https://github.com/cs-agentic/ComfyUI-DiffHDR.git ComfyUI/custom_nodes/ComfyUI-DiffHDR`
 2. `pip install -r requirements.txt` inside your ComfyUI Python environment (adds `OpenEXR` and
    `huggingface_hub`; `torch` and `safetensors` are assumed to already be provided by ComfyUI).
 3. Download the Wan2.1-VACE-14B model and Wan 2.1 VAE from the table above into the usual ComfyUI
