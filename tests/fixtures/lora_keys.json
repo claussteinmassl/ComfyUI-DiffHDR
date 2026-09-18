@@ -1,0 +1,642 @@
+{
+"vace_blocks.0.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.0.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.0.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.0.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.0.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.1.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.1.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.1.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.1.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.2.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.2.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.2.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.2.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.3.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.3.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.3.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.3.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.4.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.4.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.4.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.4.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.5.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.5.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.5.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.5.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.6.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.6.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.6.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.6.self_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.cross_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.cross_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.cross_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.cross_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.cross_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.cross_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.cross_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.cross_attn.v.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.ffn.0.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.ffn.0.lora_B.default.weight": [
+13824,
+32
+],
+"vace_blocks.7.ffn.2.lora_A.default.weight": [
+32,
+13824
+],
+"vace_blocks.7.ffn.2.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.self_attn.k.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.self_attn.k.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.self_attn.o.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.self_attn.o.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.self_attn.q.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.self_attn.q.lora_B.default.weight": [
+5120,
+32
+],
+"vace_blocks.7.self_attn.v.lora_A.default.weight": [
+32,
+5120
+],
+"vace_blocks.7.self_attn.v.lora_B.default.weight": [
+5120,
+32
+]
+}
