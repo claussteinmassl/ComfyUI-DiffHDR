@@ -1,0 +1,2 @@
+OpenEXR>=3.3
+huggingface_hub

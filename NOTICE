@@ -1,0 +1,11 @@
+ComfyUI-DiffHDR
+Copyright 2026 Claus Steinmassl
+
+This product is a ComfyUI integration of DiffHDR
+(https://github.com/Eyeline-Labs/DiffHDR, Apache-2.0) by Eyeline Labs.
+Mask detection, the log encoding curve and the long-video blending scheme are
+ported from that project.
+
+DiffHDR builds on DiffSynth-Studio (Apache-2.0) and Wan 2.1 (Apache-2.0).
+The DiffHDR LoRA weights (https://huggingface.co/ZhengmingYu/DiffHDR, Apache-2.0)
+are downloaded at runtime and are not part of this repository.
