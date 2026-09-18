@@ -50,7 +50,7 @@ def ramp_weights(length: int, first: bool, last: bool, border: int) -> torch.Ten
     if not first:
         x[:border] = ramp
     if not last:
-        x[-border:] = torch.minimum(x[-border:], ramp.flip(0))
+        x[-border:] = ramp.flip(0)
     return x
 
 

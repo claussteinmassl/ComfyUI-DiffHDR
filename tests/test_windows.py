@@ -4,6 +4,27 @@ import torch
 from diffhdr import windows
 
 
+def _reference_build_1d_mask(
+    length: int, left_bound: bool, right_bound: bool, border_width: int
+) -> torch.Tensor:
+    """Reference oracle: faithful copy from .dev/reference/DiffHDR/infer_long_video.py l.75-105."""
+    x = torch.ones((length,), dtype=torch.float32)
+    if border_width == 0:
+        return x
+    shift = 0.5
+    if not left_bound:
+        x[:border_width] = (
+            torch.arange(border_width, dtype=torch.float32) + shift
+        ) / border_width
+    if not right_bound:
+        x[-border_width:] = torch.flip(
+            (torch.arange(border_width, dtype=torch.float32) + shift)
+            / border_width,
+            dims=(0,),
+        )
+    return x
+
+
 def test_plan_basic():
     w = windows.plan_windows(65, 33, 16)
     assert [(x.start, x.end) for x in w] == [(0, 33), (16, 49), (32, 65)]
@@ -27,7 +48,19 @@ def test_ramp():
     assert windows.ramp_weights(5, True, True, 17).eq(1).all()
 
 
-@pytest.mark.parametrize("total,size,stride", [(65, 33, 16), (34, 33, 16), (100, 33, 16), (50, 17, 8), (33, 33, 16)])
+@pytest.mark.parametrize(
+    "length,first,last,border",
+    [(33, False, False, 17), (33, True, False, 17), (33, False, True, 17),
+     (20, False, False, 15), (33, False, False, 28), (18, False, True, 17), (5, True, True, 17)],
+)
+def test_ramp_matches_reference(length, first, last, border):
+    """Oracle test: ramp_weights must match the reference build_1d_mask exactly."""
+    result = windows.ramp_weights(length, first, last, border)
+    expected = _reference_build_1d_mask(length, first, last, border)
+    assert torch.equal(result, expected), f"Mismatch at ({length}, {first}, {last}, {border})"
+
+
+@pytest.mark.parametrize("total,size,stride", [(65, 33, 16), (34, 33, 16), (100, 33, 16), (50, 17, 8), (33, 33, 16), (100, 20, 5), (90, 33, 5)])
 def test_streaming_equals_dense(total, size, stride):
     g = torch.Generator().manual_seed(1)
     plan = windows.plan_windows(total, size, stride)
@@ -35,7 +68,7 @@ def test_streaming_equals_dense(total, size, stride):
     dense_v = torch.zeros(total, 2, 2, 3)
     dense_w = torch.zeros(total)
     for w, c in zip(plan, chunks):
-        r = windows.ramp_weights(c.shape[0], w.first, w.last, size - stride)
+        r = _reference_build_1d_mask(c.shape[0], w.first, w.last, size - stride)
         dense_v[w.start:w.end] += c * r.view(-1, 1, 1, 1)
         dense_w[w.start:w.end] += r
     dense = dense_v / dense_w.view(-1, 1, 1, 1)
