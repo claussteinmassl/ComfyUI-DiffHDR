@@ -16,3 +16,28 @@ jobs:
       - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: python -m pip install -r requirements.txt -r requirements-dev.txt safetensors
       - run: python -m pytest -q
+
+  test-with-comfyui:
+    name: tests with ComfyUI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check out ComfyUI
+        run: git clone --depth 1 https://github.com/comfyanonymous/ComfyUI "$RUNNER_TEMP/ComfyUI"
+      - name: Install CPU torch
+        run: python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - name: Install ComfyUI requirements
+        run: python -m pip install -r "$RUNNER_TEMP/ComfyUI/requirements.txt"
+      - name: Install our requirements
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt safetensors
+      # DIFFHDR_REQUIRE_COMFY makes the run fail instead of silently skipping the
+      # requires_comfy tests (node registration, schemas, workflow widgets_values).
+      # Tests that additionally need the local DiffHDR reference clone still skip.
+      - name: Run tests
+        env:
+          COMFYUI_PATH: ${{ runner.temp }}/ComfyUI
+          DIFFHDR_REQUIRE_COMFY: "1"
+        run: python -m pytest -q -rs
