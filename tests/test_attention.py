@@ -1,9 +1,63 @@
 """Tests for attention backend selection."""
 
+import logging
+
 import pytest
 import torch
 
 pytestmark = pytest.mark.requires_comfy
+
+
+def _fake_backends(monkeypatch, available):
+    """Installs identifiable attention backends and a fixed availability rule.
+
+    Args:
+        monkeypatch: The pytest monkeypatch fixture.
+        available: The backend names ``_available`` should report as usable.
+    """
+    import comfy.ldm.modules.attention as ca
+
+    from diffhdr import attention
+
+    monkeypatch.setattr(ca, "attention_flash", lambda *a, **k: "flash_attn")
+    monkeypatch.setattr(ca, "attention_sage", lambda *a, **k: "sage")
+    monkeypatch.setattr(attention, "_available", lambda name, device: name in available)
+
+
+def _picked(override):
+    """Returns the name of the backend an override dispatches to, or None."""
+    return None if override is None else override(None)
+
+
+def test_auto_prefers_sage_over_flash_attn(monkeypatch, caplog):
+    from diffhdr import attention
+    _fake_backends(monkeypatch, {"flash_attn", "sage"})
+    with caplog.at_level(logging.INFO, logger="DiffHDR"):
+        override = attention.resolve("auto", torch.device("cuda"))
+    assert _picked(override) == "sage"
+    assert "DiffHDR attention: sage" in caplog.text
+
+
+def test_auto_uses_flash_attn_when_sage_is_unavailable(monkeypatch):
+    from diffhdr import attention
+    _fake_backends(monkeypatch, {"flash_attn"})
+    assert _picked(attention.resolve("auto", torch.device("cuda"))) == "flash_attn"
+
+
+def test_auto_without_a_backend_is_comfyui_default(monkeypatch):
+    from diffhdr import attention
+    _fake_backends(monkeypatch, set())
+    assert attention.resolve("auto", torch.device("cuda")) is None
+
+
+def test_auto_on_cpu_ignores_importable_backends(monkeypatch):
+    import comfy.ldm.modules.attention as ca
+
+    from diffhdr import attention
+
+    monkeypatch.setattr(ca, "FLASH_ATTENTION_IS_AVAILABLE", True)
+    monkeypatch.setattr(ca, "SAGE_ATTENTION_IS_AVAILABLE", True)
+    assert attention.resolve("auto", torch.device("cpu")) is None
 
 
 def test_auto_on_cpu_is_default():

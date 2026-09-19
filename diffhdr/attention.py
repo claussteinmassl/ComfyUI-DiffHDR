@@ -58,7 +58,7 @@ def _override(target):
 def resolve(mode: str, device):
     """Returns an ``optimized_attention_override`` callable, or None for ComfyUI's default.
 
-    ``auto`` prefers flash-attn, then SageAttention, then ComfyUI's configured default.
+    ``auto`` prefers SageAttention, then flash-attn, then ComfyUI's configured default.
     Explicit ``flash_attn``/``sage`` fall back to PyTorch SDPA when unavailable. ComfyUI's
     flash/sage wrappers additionally fall back to SDPA on runtime errors.
 
@@ -79,7 +79,7 @@ def resolve(mode: str, device):
     if mode == "sdpa":
         return _override(ca.attention_pytorch)
     if mode == "auto":
-        for name in ("flash_attn", "sage"):
+        for name in ("sage", "flash_attn"):
             if _available(name, device):
                 log.info("DiffHDR attention: %s", name)
                 return _override(funcs[name])

@@ -83,8 +83,9 @@ instead of the video loader; `diffhdr_hdri.json` feeds an equirectangular panora
   processed as sliding windows starting every `window_stride` frames (default 16) and blended;
   `use_prev_window_reference` feeds each window the previous one's output for tighter temporal
   consistency.
-- **`attention`** — `auto` picks flash-attn, then SageAttention, else ComfyUI's default, with an
-  automatic PyTorch SDPA fallback.
+- **`attention`** — `auto` picks SageAttention, then flash-attn, else ComfyUI's default, with an
+  automatic PyTorch SDPA fallback. SageAttention is quantised attention; pick `sdpa` or
+  `flash_attn` explicitly if you need bit-reproducible results.
 - **`vae_precision`** — `fp32` is recommended; `as_loaded` saves memory but can band the highlights.
 
 ### Modular graph
@@ -292,7 +293,8 @@ VRAM figures and the PSNRs are host-independent.
 | GGUF `Wan2.1_14B_VACE-Q4_K_M.gguf` | 605 s | **41.0 GB** | 40.7 dB |
 
 Attention backends produce the same result: `auto` and `flash_attn` are both within **85.6 dB** of
-`sdpa` (`auto` selects flash-attn when it is importable). flash-attn was the fastest at 530 s for
+`sdpa` (`auto` resolved to flash-attn on that host, under the preference order `auto` used before
+it was changed to prefer SageAttention). flash-attn was the fastest at 530 s for
 the 20-step video versus 575 s for SDPA on that host.
 
 The reference implementation's own timings, on that same earlier host and the same inputs, were
@@ -355,6 +357,10 @@ covers three sliding windows.
 | GGUF `Q4_K_M` | sage 1.0.6 | 9.52 | 105.4 s | 29.3 GB | 1.08x |
 | GGUF `Q4_K_M` | **sage 2.2.0** | **8.70** | **97.2 s** | 30.0 GB | **1.18x** |
 
+The two `auto (-> flash_attn)` rows were measured **before** `auto` was changed to prefer
+SageAttention; they are kept unchanged because that is what ran. On the same machine today `auto`
+resolves to `sage`, i.e. it lands on the `sage 2.2.0` rows instead.
+
 Two things worth knowing beyond the attention question:
 
 * **fp8 is not slower here, and it saves 16 GB.** `fp8_e4m3fn` is 3 % *faster* than the plain
@@ -413,9 +419,11 @@ bit-for-bit-comparable results across machines, use `sdpa`.
 
 * **`attention = sage` is the fastest option on this GPU** (1.18-1.19x over SDPA end to end,
   1.08x with the PyPI package alone), and it costs no visible quality.
-* `attention = auto` currently prefers flash-attn, which on this card is only 1.02x. `auto` is
-  safe (it verifiably ran flash-attn, it never fell back), but it is **not** the fastest choice
-  here — set `sage` explicitly.
+* **`attention = auto` gets you there by itself**: it prefers SageAttention, so on a machine with
+  SageAttention installed it resolves to the fastest row above; it only falls back to flash-attn
+  (1.02x here) when SageAttention is missing, and to ComfyUI's own default when neither is
+  installed. Set `sdpa` or `flash_attn` explicitly when you want bit-reproducible output rather
+  than the quantised kernel.
 * flash-attn's benefit is small because PyTorch 2.8's SDPA already dispatches to an efficient
   fused kernel on Blackwell. Measured on the bare Wan self-attention shape (40 heads x 128,
   32,400 tokens, bf16): SDPA 60.7 ms, flash-attn 57.7 ms (1.05x), SageAttention 1.0.6 47.9 ms
@@ -542,7 +550,7 @@ Writes linear HDR as OpenEXR (single file or frame sequence) or Radiance `.hdr`.
 <details>
 <summary><b>Platform notes</b></summary>
 
-- **CUDA**: `attention=auto` prefers flash-attn, then SageAttention, then ComfyUI's own default
+- **CUDA**: `attention=auto` prefers SageAttention, then flash-attn, then ComfyUI's own default
   attention backend, depending on what is importable in your environment; unavailable/incompatible
   backends fall back to PyTorch SDPA automatically.
 - **ROCm**: treated like any other discrete accelerator; flash-attn/SageAttention availability

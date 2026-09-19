@@ -27,7 +27,7 @@ def sampler_inputs(default_seed: int) -> list:
 
 def system_inputs() -> list:
     return [
-        io.Combo.Input("attention", options=list(attention.ATTENTION_MODES), default="auto", tooltip="auto: flash-attn, then SageAttention if installed, else ComfyUI's default. Unavailable backends fall back to PyTorch SDPA."),
+        io.Combo.Input("attention", options=list(attention.ATTENTION_MODES), default="auto", tooltip="auto: SageAttention, then flash-attn if installed, else ComfyUI's default. Unavailable backends fall back to PyTorch SDPA. SageAttention is quantised attention: choose sdpa or flash_attn for bit-reproducible results."),
         io.Combo.Input("vae_precision", options=list(dvae.VAE_PRECISIONS), default="fp32", tooltip="fp32 is recommended. as_loaded saves memory but can cause banding in highlights."),
     ]
 
