@@ -15,12 +15,20 @@ byte-identical pre-sized inputs and the reference default of 50 sampling steps o
 |---|---|---|---|
 | Single image (1280×720) | 1.000000 | **57.8 dB** | 47.0 dB |
 | Video, 33 frames (1280×720) | 1.000000 | **59.1 dB** | 42.1 dB |
+| Long video, **all 99 demo frames, 6 blended windows** | 1.000000 | **57.5 dB** | — |
 | Long video, 65 frames, 3 blended windows | 1.000000 | **53.4 dB** | 33.2 dB |
 | HDRI panorama (2048×1024) | 1.000000 | **51.1 dB** | — |
 
-In every case the output is *closer to the reference* than two runs of the reference itself (with
-different seeds) are to each other, and the exposure masks are bit-identical to the reference
-algorithm. Inside the reconstructed (masked) region the robust highlight statistics agree closely
+The 99-frame run covers the full demo sequence, so the last window is short (19 real frames) and is
+padded to the trained length by repeating the last frame, exactly as the reference does. Inside the
+reconstructed region the two agree to within 5 % on p99.9 luminance (25.4 vs 24.2) and 0.3 % on the
+mean log value (0.4255 vs 0.4244), and the largest frame-to-frame step in masked mean log at a
+window boundary is 0.0035 against a median of 0.0014 over a 0.377–0.450 range — i.e. no visible
+seam, including at the padded last window.
+
+Wherever a reference seed-to-seed floor could be measured, the output is *closer to the reference*
+than two runs of the reference itself (with different seeds) are to each other, and the exposure
+masks are bit-identical to the reference algorithm in every case. Inside the reconstructed (masked) region the robust highlight statistics agree closely
 — e.g. for the 33-frame video p99.9 luminance 3.82 vs 3.72 and mean log value 0.4004 vs 0.3995 —
 while the single brightest pixel is not a meaningful comparison, because the reference's own two
 seeds differ on it by a factor of ~4 (p99.9 of 3.72 vs 13.65 between reference seeds 10 and 11).
@@ -72,7 +80,7 @@ save the ~11 GB umT5-xxl download and its load time; the `prompt` widget is then
 The bundled embeddings were produced with ComfyUI's own umT5-xxl encoder (`scripts/make_embeds.py`)
 and verified on the GPU: cosine similarity against the DiffSynth prompter output used by the
 reference implementation is 0.999997 (empty prompt) and 0.99982 (panorama prompt) — closer than the
-reference's own bfloat16 GPU run is to its float32 run (0.99987 / 0.99953). A 33-frame video
+reference's own bfloat16 run is to its float32 run (0.99996 / 0.99955). A 33-frame video
 reconstructed with the bundled embeddings matches the same run with a live `CLIPLoader` at
 **85.5 dB** log-space PSNR. Connect a umT5-xxl CLIP (`CLIPLoader`, type `wan`) only if you want to
 experiment with your own prompts.
@@ -184,22 +192,97 @@ match whatever you actually have installed if you used the GGUF or a different p
 
 ## Performance
 
+Every DiffHDR node logs one INFO line per execution with its own stage breakdown, so you can see
+where your time goes on your own hardware instead of guessing:
+
+```
+DiffHDR timing [video, 33 frames, 1 window(s), 10 steps]: prepare=0.0s conditioning=1.0s
+model_patch=0.0s masks=6.2s control=1.9s encode=7.6s sample=118.2s decode=5.5s window=131.5s
+blend=1.0s total=141.8s
+DiffHDR timing [save_exr, 33 frames, exr/float/zip]: write=7.2s preview=0.5s total=7.7s
+```
+
+`total` is wall clock for the whole node, so it is not the sum of the stages: `window` already
+contains `encode`/`sample`/`decode`, and the difference between `total` and the stages is work no
+stage covers.
+
+### Where the time goes
+
 Measured on an **NVIDIA A100 80GB PCIe** (CUDA 12.8, PyTorch 2.8, ComfyUI 0.36.0), bf16
-`wan2.1_vace_14B_fp16.safetensors` with the float32 VAE, PyTorch SDPA attention, at 1280×720.
-"Warm" means the model was already resident in the ComfyUI process; the first run after a restart
-additionally pays a **153 s** model load (measured: 591 s cold vs 438 s warm for the same job).
+`wan2.1_vace_14B_fp16.safetensors` with the float32 VAE, PyTorch SDPA attention, umT5 connected,
+1280×720 (panorama 2048×1024), **warm** (model already resident), **10 sampling steps**. Seconds.
+
+| Stage | Image | Video, 33 frames | Panorama |
+|---|---|---|---|
+| `prepare` (resize / fit) | 0.0 | 0.0 | 0.0 |
+| `conditioning` (text embeddings) | 0.8 | 1.0 | 0.8 |
+| `model_patch` (LoRA + shift + attention) | 0.0 | 0.0 | 0.0 |
+| `masks` (exposure detection + stabilisation) | 0.4 | 6.2 | 0.1 |
+| `control` (log encoding, reference prep) | 0.1 | 1.9 | 0.2 |
+| `encode` (VACE tensors, 2 VAE encodes) | 8.0 | 7.6 | 0.8 |
+| **`sample`** | **118.2** | **118.2** | **20.1** |
+| `decode` (VAE) | 5.5 | 5.5 | 0.3 |
+| `blend` (window overlap) | — | 1.0 | — |
+| **node total** | **133.3** | **141.8** | **22.4** |
+| Save EXR (float32 / ZIP, write + preview) | 0.4 | 7.7 | 0.8 |
+| graph overhead (image loading, queue) | 6.4 | 6.1 | 1.9 |
+| **end-to-end** | **140.1** | **155.6** | **25.1** |
+
+Three things follow directly from these measurements:
+
+* **Sampling is linear in steps and is the whole story.** From 10 and 50 steps on the same job:
+  `(588.1 − 118.2) / 40` = **11.7 s per step** at 720p × 33 frames, with an intercept of 0.7 s.
+* **The per-job fixed cost is small**: node total minus `sample` is **24 s** for a 33-frame video
+  and **15 s** for an image. (Earlier versions of this README quoted "roughly 300 s of fixed cost";
+  that figure was *derived* from a line fit on a CPU-starved host, and it is wrong — the number
+  above is measured stage by stage.)
+* **Image mode is not cheaper because it samples less.** It replicates the single frame to the
+  trained 33-frame window, so it runs the *same* VAE and sampling work: `window` is 131.9 s
+  (image) against 131.5 s (video). The whole difference is per-frame CPU work, mostly mask
+  detection over 33 frames instead of 1.
+
+### Totals
+
+Same host and settings; warm. A cold first run after a ComfyUI restart adds a **170 s** model load
+(measured 350.9 s cold vs 180.7 s warm for the same job).
 
 | Mode | Steps | Output frames | Warm wall time | s / output frame | Peak VRAM |
 |---|---|---|---|---|---|
-| Image (720p) | 50 | 1 | 636 s | 636 | 62.9 GB |
-| Image (720p) | 10 | 1 | 150 s | 150 | 62.9 GB |
-| Video, 33 frames (720p) | 50 | 33 | 935 s | 28.3 | 63.5 GB |
-| Video, 33 frames (720p) | 20 | 33 | 575 s | 17.4 | 62.2 GB |
-| Video, 33 frames (720p) | 10 | 33 | 438 s | 13.3 | 64.2 GB |
-| Long video, 65 frames, 3 windows | 50 | 65 | 2701 s (900 s / window) | 41.6 | 64.6 GB |
-| HDRI panorama 2048×1024 | 50 | 1 | 115 s | 115 | 49.0 GB |
+| Image (720p) | 10 | 1 | 140 s | 140 | 62.9 GB |
+| Video, 33 frames (720p) | 10 | 33 | 156 s | 4.7 | 63.4 GB |
+| Video, 33 frames (720p) | 50 | 33 | 636 s | 19.3 | 62.9 GB |
+| Long video, 99 frames, 6 windows | 20 | 99 | 1559 s (260 s / window) | 15.7 | 63.4 GB |
+| Long video, 99 frames, 6 windows | 50 | 99 | 3706 s (618 s / window) | 37.4 | 63.4 GB |
+| Long video, 99 frames, `use_prev_window_reference` | 20 | 99 | 1754 s | 17.7 | 63.4 GB |
+| HDRI panorama 2048×1024 | 10 | 1 | 25 s | 25 | 48.7 GB |
 
-Quantised base models, 33-frame video at 20 steps:
+The panorama is far cheaper than the video modes because it is a single latent frame: 2048×1024 is
+256×128 latent pixels against 9 latent frames × 80×45 for a 720p clip.
+
+### The same GPU can be twice as slow
+
+These jobs are GPU-bound only during `sample`. Everything else is CPU work, and two rented
+"A100 80GB PCIe" hosts measured **2.4× apart** end-to-end on the identical 10-step 33-frame job
+with identical code (181 s vs 438 s) even though the sampling component — the only GPU-bound part
+— differed by about 5 % (118 s measured here against the ~124 s implied by the other host's
+step-count fit). The cause is CPU contention, and one setting dominates it: PyTorch sizes its
+thread pool from the cores the container *advertises*, not from the cores the instance is
+*allocated*. On a pod that showed 128 cores to `torch` but was allocated 16 vCPU, capping the pool
+nearly halved the mask stage:
+
+| `torch.get_num_threads()` | mask stage, 33 frames @720p |
+|---|---|
+| 64 (the default there) | 6.4 s |
+| 16 | 3.5 s |
+
+If your `DiffHDR timing` line shows a large `masks` or `control` value relative to `sample`, set
+`OMP_NUM_THREADS` to the number of cores you actually have before starting ComfyUI.
+
+### Quantised base models and attention backends
+
+Measured in an earlier session on a different A100 80GB PCIe host (the one at the slow end of the
+range above), 33-frame video at 20 steps. The wall times are only comparable **to each other**; the
+VRAM figures and the PSNRs are host-independent.
 
 | Base model | Warm wall time | Peak VRAM | Log-space PSNR vs bf16 |
 |---|---|---|---|
@@ -209,28 +292,29 @@ Quantised base models, 33-frame video at 20 steps:
 
 Attention backends produce the same result: `auto` and `flash_attn` are both within **85.6 dB** of
 `sdpa` (`auto` selects flash-attn when it is importable). flash-attn was the fastest at 530 s for
-the 20-step video versus 575 s for SDPA.
+the 20-step video versus 575 s for SDPA on that host.
 
-Two notes on where the time goes. Image mode is much cheaper per run than a 33-frame video at the
-same step count (150 s vs 438 s at 10 steps) even though both sample the same ~32 400 tokens,
-because the per-frame exposure-mask stabilisation runs once instead of 33 times. And the sampler
-itself costs about 12 s/step at 720p×33 frames, so a 33-frame job has roughly 300 s of fixed cost
-(masking, two VAE encodes and one decode, all in float32) on top of `12 s × steps`.
-
-The reference implementation's own timings on the same GPU and inputs were 1185 s (image), 994 s
-(33-frame video), 3579 s (65-frame long video) and 592 s (panorama) — but each of those is a fresh
-process that loads the 14B model from scratch every time (~270-400 s of the total), so they are not
-directly comparable to the warm numbers above.
+The reference implementation's own timings, on that same earlier host and the same inputs, were
+1185 s (image), 994 s (33-frame video) and 592 s (panorama); on the faster host its 99-frame long
+video took 4538 s against our 3706 s. Each reference invocation is a fresh process that loads the
+14B model from scratch (~270–400 s of the total), so they are not directly comparable to the warm
+numbers above.
 
 ### How many steps?
 
-- **50 steps** reproduces the published setting and is what the parity numbers above were measured at.
-- **20 steps** is the best speed/quality trade-off: 40 % faster, and the reconstructed highlights
-  stay within ~4 % of the 50-step result (masked p99.9 luminance 3.98 vs 3.82) at 47 dB masked PSNR.
-  It is still closer to the 50-step reference than two reference seeds are to each other.
+- **50 steps** reproduces the published setting and is what all parity numbers above were measured at.
+- **20 steps** is usually the best speed/quality trade-off — 40 % faster — but how much highlight
+  energy it gives up depends on the shot. On the 33-frame test clip the reconstructed highlights
+  stay within ~4 % of the 50-step result (masked p99.9 luminance 3.98 vs 3.82) at 47 dB masked
+  PSNR; on the much brighter 99-frame long-video sequence 20 steps reconstructs **~20 % less**
+  (masked p99.9 19.4 vs the reference's 24.2, against 25.4 at 50 steps), while staying at 58.8 dB
+  outside the mask. Check the highlights on your own footage before committing to 20.
 - **10 steps** is fine for previews and for finding a seed, but it does *not* reconstruct the same
   amount of highlight energy: on the test image the masked p99.9 luminance drops from 8.87 to 5.61
   (−37 %) and the peak from 15.0 to 6.4. Use it to iterate, then re-run the keeper at 20 or 50.
+- `use_prev_window_reference` on long videos costs about 13 % more time (1754 s vs 1559 s at 20
+  steps over 99 frames) and visibly tightens temporal consistency: the per-frame masked mean log
+  value varies over 0.425–0.454 with it against 0.384–0.452 without.
 
 ## Platform notes
 
