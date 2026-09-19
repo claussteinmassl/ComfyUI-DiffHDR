@@ -320,9 +320,145 @@ numbers above.
 </details>
 
 <details>
-<summary><b>Benchmarks (RTX PRO 6000 Blackwell)</b></summary>
+<summary><b>Benchmarks — RTX PRO 6000 Blackwell (attention backends and model precision)</b></summary>
 
-<!-- BENCHMARKS: filled from .dev/gpu/bench/README_SECTION.md -->
+All numbers below were **measured** on a rented **NVIDIA RTX PRO 6000 Blackwell Workstation
+Edition** (96 GB, compute capability 12.0, driver 610.57.04) on 2026-09-19: ComfyUI v0.36.0,
+PyTorch 2.8.0+cu128, Triton 3.4.0, flash-attn 2.8.3, SageAttention 1.0.6 (PyPI) and 2.2.0
+(source build), `OMP_NUM_THREADS=31`, float32 VAE, bundled text embeddings (no CLIP loader),
+pre-sized inputs with `resize_mode=native`.
+
+Every row is **warm** (the model was already resident; the cold run before it is discarded) and
+every row was checked in the ComfyUI log: the requested backend actually ran — no run fell back
+to SDPA, and nothing was offloaded or partially loaded, so the VRAM figures are the real
+working-set peaks (`nvidia-smi`, sampled once a second).
+
+### Attention x precision — 33 frames, 1280x720, 10 steps
+
+`s/step` is the `sample` stage divided by the step count; `total` is the node's own wall clock.
+The long-video rows quote seconds per *output frame* instead, because their `sample` stage
+covers three sliding windows.
+
+| Model / precision | Attention | s/step | Total (33 f @ 10) | Peak VRAM | vs SDPA |
+|---|---|---|---|---|---|
+| fp16 file, default dtype | sdpa | 9.75 | 108.3 s | 50.9 GB | 1.00x |
+| fp16 file, default dtype | flash_attn 2.8.3 | 9.61 | 106.8 s | 50.7 GB | 1.02x |
+| fp16 file, default dtype | sage 1.0.6 | 9.03 | 100.7 s | 52.0 GB | 1.08x |
+| fp16 file, default dtype | **sage 2.2.0** | **8.24** | **92.8 s** | 50.9 GB | **1.18x** |
+| fp16 file, default dtype | auto (-> flash_attn) | 9.60 | 106.7 s | 50.7 GB | 1.02x |
+| `weight_dtype=fp8_e4m3fn` | sdpa | 9.46 | 105.2 s | 34.9 GB | 1.00x |
+| `weight_dtype=fp8_e4m3fn` | flash_attn 2.8.3 | 9.30 | 103.6 s | 35.8 GB | 1.02x |
+| `weight_dtype=fp8_e4m3fn` | sage 1.0.6 | 8.74 | 97.7 s | 35.8 GB | 1.08x |
+| `weight_dtype=fp8_e4m3fn` | **sage 2.2.0** | **7.94** | **89.5 s** | 34.9 GB | **1.19x** |
+| `weight_dtype=fp8_e4m3fn` | auto (-> flash_attn) | 9.30 | 103.3 s | 35.0 GB | 1.02x |
+| GGUF `Q4_K_M` | sdpa | 10.25 | 113.0 s | 28.7 GB | 1.00x |
+| GGUF `Q4_K_M` | sage 1.0.6 | 9.52 | 105.4 s | 29.3 GB | 1.08x |
+| GGUF `Q4_K_M` | **sage 2.2.0** | **8.70** | **97.2 s** | 30.0 GB | **1.18x** |
+
+Two things worth knowing beyond the attention question:
+
+* **fp8 is not slower here, and it saves 16 GB.** `fp8_e4m3fn` is 3 % *faster* than the plain
+  fp16 file at 34.9 GB instead of 50.9 GB peak. GGUF `Q4_K_M` is the smallest (28.7 GB) but the
+  slowest of the three with SDPA (+8 %).
+* On this 96 GB card nothing ever offloaded, at any precision.
+
+### Image, panorama, step scaling, long video
+
+| Job | Attention | Steps | s/step | Node total | Wall | Peak VRAM |
+|---|---|---|---|---|---|---|
+| Image 1280x720 | sdpa | 10 | 9.76 | 106.7 s | 110.0 s | 50.7 GB |
+| Image 1280x720 | sage 2.2.0 | 10 | 8.24 | 91.5 s | 95.0 s | 50.9 GB |
+| Panorama 2048x1024 | sdpa | 10 | 1.65 | 17.1 s | 20.0 s | 36.8 GB |
+| Panorama 2048x1024 | sage 2.2.0 | 10 | 1.55 | 16.1 s | 20.0 s | 36.8 GB |
+| Video 33 f | sage 1.0.6 | 20 | 8.95 | 189.1 s | 200.1 s | 50.3 GB |
+| Video 33 f | sage 1.0.6 | 50 | 9.04 | 462.8 s | 470.2 s | 52.2 GB |
+| Video 33 f | sage 2.2.0 | 20 | 8.25 | 175.1 s | 185.1 s | 50.3 GB |
+| Video 33 f | sage 2.2.0 | 50 | 8.26 | 423.6 s | 430.2 s | 52.2 GB |
+| Long video, 65 f, 3 windows, fp8 | sage 1.0.6 | 10 | 5.77 s / frame | 362.8 s | 375.2 s | 35.2 GB |
+| Long video, 65 f, 3 windows, fp8 | sage 2.2.0 | 10 | **5.16 s / frame** | 322.1 s | 335.2 s | 35.9 GB |
+
+**Sampling is linear in steps.** With SageAttention 2.2.0 on the 33-frame clip:
+`(413.2 - 165.0) / 30 = 8.27 s/step`, and the 10-step run gives 8.24 s/step — the same number,
+so there is no measurable per-run sampling overhead. A 65-frame clip (three blended windows,
+fp8 + SageAttention 2.2.0, 10 steps) finishes in **335 s, i.e. 5.2 s per output frame**.
+
+### Quality guard — is the speed-up free?
+
+SageAttention is *approximate, quantised* attention, so a speed-up only counts if the HDR
+reconstruction is unchanged. For one fixed seed each backend was compared against the SDPA
+output of the same precision (33 frames, log-space PSNR, plus the masked highlight statistics
+that actually matter for HDR):
+
+| Precision | Backend | log PSNR (frame) | log PSNR (masked) | masked p99.9 | masked p99.99 | masked mean-log |
+|---|---|---|---|---|---|---|
+| fp16 | flash_attn 2.8.3 | 84.1 dB | 81.5 dB | -0.04 % | -0.02 % | -0.006 % |
+| fp16 | sage 1.0.6 | 73.6 dB | 69.4 dB | -0.19 % | -0.12 % | +0.019 % |
+| fp16 | sage 2.2.0 | 71.4 dB | 65.3 dB | -0.44 % | -0.33 % | -0.077 % |
+| fp8 | flash_attn 2.8.3 | 83.9 dB | 80.6 dB | -0.05 % | -0.03 % | -0.007 % |
+| fp8 | sage 1.0.6 | 69.1 dB | 62.0 dB | -1.04 % | -0.92 % | -0.146 % |
+| fp8 | sage 2.2.0 | 69.1 dB | 62.1 dB | +0.80 % | +0.85 % | +0.138 % |
+| GGUF | sage 1.0.6 | 72.1 dB | 66.9 dB | -0.47 % | -0.36 % | -0.050 % |
+| GGUF | sage 2.2.0 | 71.3 dB | 65.3 dB | -0.49 % | -0.26 % | -0.065 % |
+
+**flash-attn is numerically free**: 84 dB against SDPA and highlight statistics that move by
+less than 0.05 %. **SageAttention is visually free and numerically almost free**: even its worst
+row is 62 dB inside the reconstructed region — far above the 40 dB bar this project uses for
+"same image" — and the reconstructed highlight energy moves by at most 1 %, in both directions,
+i.e. it is noise rather than a systematic loss. Tonemapped side-by-side sheets (0 EV, -4 EV and
+a highlight crop, one row per backend) were inspected at all three precisions and the backends
+are indistinguishable. Use SageAttention for HDR work without hesitation; if you want
+bit-for-bit-comparable results across machines, use `sdpa`.
+
+### What to set
+
+* **`attention = sage` is the fastest option on this GPU** (1.18-1.19x over SDPA end to end,
+  1.08x with the PyPI package alone), and it costs no visible quality.
+* `attention = auto` currently prefers flash-attn, which on this card is only 1.02x. `auto` is
+  safe (it verifiably ran flash-attn, it never fell back), but it is **not** the fastest choice
+  here — set `sage` explicitly.
+* flash-attn's benefit is small because PyTorch 2.8's SDPA already dispatches to an efficient
+  fused kernel on Blackwell. Measured on the bare Wan self-attention shape (40 heads x 128,
+  32,400 tokens, bf16): SDPA 60.7 ms, flash-attn 57.7 ms (1.05x), SageAttention 1.0.6 47.9 ms
+  (1.27x), SageAttention 2.2.0 32.7 ms (2.05x). Attention is roughly a third of the sampling
+  cost, which is why a 2x attention kernel becomes a 1.19x job.
+* Combine `sage` with `weight_dtype = fp8_e4m3fn` for the best of both: fastest measured
+  configuration *and* 16 GB less VRAM than the plain fp16 file.
+
+### Install recipe that worked (Linux, Python 3.12, PyTorch 2.8.0+cu128)
+
+flash-attn — prebuilt wheel, no compilation, 11 s:
+
+```bash
+pip install --no-deps \
+  https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
+```
+
+Pick the asset whose `torch2.X`, `cp3XX` and `cxx11abi{TRUE,FALSE}` match your environment
+(`python -c "import torch; print(torch.__version__, torch._C._GLIBCXX_USE_CXX11_ABI)"`).
+
+SageAttention — the PyPI package installs in seconds and works, but on Blackwell it prints
+`You need pytorch with cu130 or higher to use optimized CUDA operations` and falls back to its
+slower Triton path:
+
+```bash
+pip install sageattention          # 1.0.6, 1.08x
+```
+
+SageAttention 2.2.0 from source is what gives the 1.18x; it compiled in **277 s** (4.6 min) with
+16 parallel jobs on a 32-vCPU pod:
+
+```bash
+git clone https://github.com/thu-ml/SageAttention.git && cd SageAttention && git checkout v2.2.0
+export TORCH_CUDA_ARCH_LIST=12.0     # 8.6 for Ampere RTX A6000, 8.9 for Ada, 9.0 for Hopper
+export MAX_JOBS=16 EXT_PARALLEL=4 NVCC_APPEND_FLAGS="--threads 4"
+pip install --no-build-isolation .
+```
+
+Restart ComfyUI afterwards and check the startup log: the node logs
+`DiffHDR attention: <backend>` for `auto`, warns and falls back to SDPA when a backend is
+missing, and ComfyUI itself logs `Flash Attention failed, using default SDPA` or
+`Error running sage attention` per call if a kernel fails at runtime. If you see any of those,
+the run you are looking at is an SDPA run.
 
 </details>
 
