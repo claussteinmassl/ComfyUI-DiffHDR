@@ -47,28 +47,38 @@ of them was downloaded and run end-to-end during GPU validation.
 
 **The text encoder is optional.** DiffHDR was trained with an empty prompt for images/video and a
 fixed prompt for panoramas, so both all-in-one nodes ship with exactly those embeddings baked in
-(`assets/embeds/`) and run with **no CLIP model loaded at all**. Leave `clip` unconnected and you
-save the ~11 GB umT5-xxl download and its load time; the `prompt` widget is then ignored. Connect a
-umT5-xxl CLIP (`CLIPLoader`, type `wan`) only if you want to experiment with your own prompts.
+(`assets/embeds/`) and run with **no CLIP model loaded at all**. The three all-in-one example
+graphs therefore contain no `CLIPLoader`: leave `clip` unconnected and you save the ~11 GB
+umT5-xxl download and its load time; the `prompt` widget is then ignored. Add a umT5-xxl
+`CLIPLoader` (type `wan`) only if you want to experiment with your own prompts — the modular
+example graph needs it, because its `CLIPTextEncode` → `WanVaceToVideo` path has no baked-in
+embeddings.
 
 ## Usage
 
 Four example workflows are in `workflows/` (ComfyUI UI-format JSON, load with **Open** or
 drag-and-drop): `diffhdr_image.json`, `diffhdr_video.json`, `diffhdr_hdri.json` and
-`diffhdr_modular.json`. All of them reference `wan2.1_vace_14B_fp16.safetensors`,
-`wan_2.1_vae.safetensors` and `umt5_xxl_fp8_e4m3fn_scaled.safetensors` — set the loader widgets to
-match whatever you actually have installed if you use the GGUF or a different precision.
+`diffhdr_modular.json`. All of them reference `wan2.1_vace_14B_fp16.safetensors` and
+`wan_2.1_vae.safetensors` (the modular graph additionally needs
+`umt5_xxl_fp8_e4m3fn_scaled.safetensors`) — set the loader widgets to match whatever you actually
+have installed if you use the GGUF or a different precision.
 
 ### Quick start: the all-in-one node
 
 ![The diffhdr_video.json example workflow in the ComfyUI graph editor](assets/readme/workflow-simple.jpg)
 
+*The whole graph: two loaders, a video loader and the all-in-one node. No text encoder — the
+`clip` input stays empty because the umT5 embeddings are baked in.*
+
 `workflows/diffhdr_video.json` — everything under one hood: `UNETLoader` + `VAELoader` +
-`CLIPLoader` (type `wan`) + `LoadVideo` + `GetVideoComponents` (core ComfyUI video nodes, no
-VideoHelperSuite dependency) → **DiffHDR (Image / Video)** → `DiffHDR Save EXR` and
-`DiffHDR Tonemap Preview` → `PreviewImage`. `diffhdr_image.json` is the same graph with `LoadImage`
-instead of the video loader; `diffhdr_hdri.json` feeds an equirectangular panorama into
-**DiffHDR HDRI (Panorama)**. The inputs that matter:
+`LoadVideo` + `GetVideoComponents` (core ComfyUI video nodes, no VideoHelperSuite dependency) →
+**DiffHDR (Image / Video)** → `DiffHDR Save EXR` and `DiffHDR Tonemap Preview` → `PreviewImage`.
+`diffhdr_image.json` is the same graph with `LoadImage` instead of the video loader;
+`diffhdr_hdri.json` feeds an equirectangular panorama into **DiffHDR HDRI (Panorama)**. There is
+deliberately **no text encoder** in these three graphs: the bundled umT5 embeddings cover the
+prompts DiffHDR was trained with, so the `clip` input is left unconnected and the `prompt` widget
+is ignored. Add a `CLIPLoader` (umT5-xxl, type `wan`) and wire it to `clip` only if you want to
+encode a prompt of your own. The inputs that matter:
 
 - **`steps`** — 50 reproduces the published setting, 20 is usually the best trade-off, 10 is for
   iterating. See *Performance and how many steps?* below.

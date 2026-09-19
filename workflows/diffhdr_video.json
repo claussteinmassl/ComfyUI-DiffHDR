@@ -106,86 +106,18 @@
       }
     },
     {
-      "id": 3,
-      "type": "CLIPLoader",
-      "pos": [
-        0,
-        300
-      ],
-      "size": [
-        270,
-        106
-      ],
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "clip_name",
-          "name": "clip_name",
-          "type": "COMBO",
-          "widget": {
-            "name": "clip_name"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "type",
-          "name": "type",
-          "type": "COMBO",
-          "widget": {
-            "name": "type"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "device",
-          "name": "device",
-          "shape": 7,
-          "type": "COMBO",
-          "widget": {
-            "name": "device"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "CLIP",
-          "name": "CLIP",
-          "type": "CLIP",
-          "links": [
-            5
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPLoader"
-      },
-      "widgets_values": [
-        "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-        "wan",
-        "default"
-      ],
-      "widgets_values_named": {
-        "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-        "type": "wan",
-        "device": "default"
-      }
-    },
-    {
       "id": 4,
       "type": "LoadVideo",
       "pos": [
         0,
-        480
+        300
       ],
       "size": [
         282.798828125,
         82
       ],
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -234,14 +166,14 @@
       "type": "GetVideoComponents",
       "pos": [
         300,
-        480
+        300
       ],
       "size": [
         250,
         106
       ],
       "flags": {},
-      "order": 5,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
@@ -301,7 +233,7 @@
         524
       ],
       "flags": {},
-      "order": 6,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -327,7 +259,7 @@
           "name": "clip",
           "shape": 7,
           "type": "CLIP",
-          "link": 5
+          "link": null
         },
         {
           "localized_name": "mask",
@@ -537,7 +469,7 @@
         226
       ],
       "flags": {},
-      "order": 7,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
@@ -656,7 +588,7 @@
         82
       ],
       "flags": {},
-      "order": 8,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
@@ -718,7 +650,7 @@
         26
       ],
       "flags": {},
-      "order": 4,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
@@ -773,14 +705,6 @@
       6,
       2,
       "IMAGE"
-    ],
-    [
-      5,
-      3,
-      0,
-      6,
-      3,
-      "CLIP"
     ],
     [
       6,
