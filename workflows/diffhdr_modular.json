@@ -64,7 +64,7 @@
       "id": 2,
       "type": "DiffHDRApplyLora",
       "pos": [
-        300,
+        330,
         0
       ],
       "size": [
@@ -126,7 +126,7 @@
       "id": 3,
       "type": "ModelSamplingSD3",
       "pos": [
-        600,
+        660,
         0
       ],
       "size": [
@@ -178,7 +178,7 @@
       "type": "VAELoader",
       "pos": [
         0,
-        160
+        320
       ],
       "size": [
         270,
@@ -224,7 +224,7 @@
       "type": "CLIPLoader",
       "pos": [
         0,
-        300
+        160
       ],
       "size": [
         270,
@@ -292,12 +292,12 @@
       "id": 6,
       "type": "CLIPTextEncode",
       "pos": [
-        300,
-        300
+        330,
+        160
       ],
       "size": [
         400,
-        200
+        140
       ],
       "flags": {},
       "order": 6,
@@ -344,12 +344,12 @@
       "id": 7,
       "type": "CLIPTextEncode",
       "pos": [
-        300,
-        460
+        330,
+        360
       ],
       "size": [
         400,
-        200
+        140
       ],
       "flags": {},
       "order": 7,
@@ -452,11 +452,11 @@
       "id": 9,
       "type": "GetVideoComponents",
       "pos": [
-        300,
+        330,
         620
       ],
       "size": [
-        193.530859375,
+        250,
         106
       ],
       "flags": {},
@@ -512,7 +512,7 @@
       "id": 10,
       "type": "DiffHDRPreprocess",
       "pos": [
-        600,
+        660,
         620
       ],
       "size": [
@@ -593,8 +593,8 @@
       "id": 11,
       "type": "WanVaceToVideo",
       "pos": [
-        950,
-        300
+        1000,
+        240
       ],
       "size": [
         270,
@@ -745,7 +745,7 @@
       "id": 12,
       "type": "KSampler",
       "pos": [
-        1350,
+        1340,
         0
       ],
       "size": [
@@ -871,8 +871,8 @@
       "id": 13,
       "type": "TrimVideoLatent",
       "pos": [
-        1700,
-        300
+        1340,
+        340
       ],
       "size": [
         270,
@@ -922,11 +922,11 @@
       "id": 14,
       "type": "VAEDecode",
       "pos": [
-        2000,
-        300
+        1340,
+        460
       ],
       "size": [
-        140,
+        190,
         46
       ],
       "flags": {},
@@ -964,11 +964,11 @@
       "id": 15,
       "type": "DiffHDRPostprocess",
       "pos": [
-        2300,
-        300
+        1340,
+        580
       ],
       "size": [
-        178.8404296875,
+        200,
         26
       ],
       "flags": {},
@@ -1001,7 +1001,7 @@
       "id": 16,
       "type": "DiffHDRSaveEXR",
       "pos": [
-        2600,
+        1660,
         0
       ],
       "size": [
@@ -1120,8 +1120,8 @@
       "id": 17,
       "type": "DiffHDRTonemap",
       "pos": [
-        2600,
-        400
+        1660,
+        300
       ],
       "size": [
         274.5650390625,
@@ -1182,11 +1182,11 @@
       "id": 18,
       "type": "PreviewImage",
       "pos": [
-        2950,
-        400
+        1660,
+        440
       ],
       "size": [
-        140,
+        210,
         26
       ],
       "flags": {},
