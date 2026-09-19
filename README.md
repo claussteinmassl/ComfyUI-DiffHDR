@@ -357,6 +357,13 @@ numbers above.
   and the default `window_size=33` match that training distribution most closely. Other sizes and
   window lengths work but are extrapolating beyond the training distribution.
 - `window_size` must be `4n+1`; `window_stride` must be smaller than `window_size`.
+- Long clips cost host RAM in proportion to their length. At 1280×720 a frame needs about
+  **37 MB of system RAM** while the node runs — roughly 26 MB of it allocated by DiffHDR
+  itself (log-encoded control frames, mask, HDR output buffer) plus the ~11 MB input IMAGE
+  that ComfyUI keeps cached. The figure is derived from the tensor sizes
+  (`1280·720·3·4` bytes per float32 RGB frame, `1280·720·4` per mask frame), not measured
+  on a specific machine. A 500-frame 720p clip therefore needs roughly 18 GB of free RAM;
+  split longer shots or process them in parts.
 - The published numbers were measured on a single A100 80GB PCIe; other GPUs will differ.
 - The Windows GPU path is untested.
 

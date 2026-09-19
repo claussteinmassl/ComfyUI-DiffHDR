@@ -103,3 +103,28 @@ def test_pano_mask():
     m = masks.pano_mask(img)
     assert m.shape == (32, 64)
     assert m[6:10, 10:22].min() == 1.0 and m[20:, :].max() == 0.0
+
+
+def test_video_masks_does_not_touch_its_input():
+    clip = _clip()
+    before = clip.clone()
+    masks.video_masks(clip, use_over=True, use_under=True)
+    assert torch.equal(clip, before)
+    masks.video_masks(clip, use_over=True, use_under=False)
+    assert torch.equal(clip, before)
+
+
+def test_stabilize_sequence_reuses_the_soft_mask_buffer():
+    """Memory guard: EMA, morphology and binarisation all run in the input buffer."""
+    soft = torch.rand(6, 24, 32, generator=torch.Generator().manual_seed(3))
+    out = masks._stabilize_sequence(soft)
+    assert out is soft
+    assert set(out.unique().tolist()) <= {0.0, 1.0}
+
+
+def test_unrequested_mask_costs_no_memory():
+    """Memory guard: the mask that was not asked for is a zero-stride view of one element."""
+    out = masks.video_masks(_clip(), use_over=True, use_under=False)
+    assert out.under.shape == (5, 48, 64) and float(out.under.abs().sum()) == 0.0
+    assert out.under.numel() * out.under.element_size() > out.under.untyped_storage().nbytes()
+    assert out.combined is out.over          # no separate copy when only one mask is used

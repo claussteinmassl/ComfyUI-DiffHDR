@@ -79,3 +79,39 @@ def test_pano():
     img = _clip(1, 32, 64)
     out = pipeline.run_pano(img, rec)
     assert rec.calls[0][0] == 1 and out.hdr.shape == img.shape and out.mask.shape == (1, 32, 64)
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"mask_overexposed": True},
+    {"mask_overexposed": True, "mask_underexposed": True},
+    {"user_mask": torch.ones(40, 16, 32)},
+])
+def test_run_video_does_not_touch_its_inputs(kwargs):
+    """ComfyUI caches node outputs, so the input IMAGE/MASK must come back unchanged."""
+    clip = _clip(40)
+    clip[:, 10:14, 20:30] = 0.0
+    reference = torch.rand(1, 16, 32, 3, generator=torch.Generator().manual_seed(1))
+    before, ref_before = clip.clone(), reference.clone()
+    user_mask = kwargs.get("user_mask")
+    mask_before = None if user_mask is None else user_mask.clone()
+    pipeline.run_video(clip, Recorder(), reference=reference, **kwargs)
+    assert torch.equal(clip, before)
+    assert torch.equal(reference, ref_before)
+    if user_mask is not None:
+        assert torch.equal(user_mask, mask_before)
+
+
+def test_run_video_survives_out_of_range_inputs():
+    """Values outside [0,1] must still be clamped exactly as before."""
+    clip = _clip(8)
+    wild = clip * 1.5 - 0.25
+    out = pipeline.run_video(wild, Recorder(), mask_overexposed=True)
+    expected = pipeline.run_video(wild.clamp(0, 1), Recorder(), mask_overexposed=True)
+    assert torch.equal(out.hdr, expected.hdr) and torch.equal(out.mask, expected.mask)
+
+
+def test_run_pano_does_not_touch_its_input():
+    img = _clip(1, 32, 64)
+    before = img.clone()
+    pipeline.run_pano(img, Recorder())
+    assert torch.equal(img, before)

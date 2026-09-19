@@ -4,8 +4,9 @@ The results are bit-identical to the reference implementation (see
 ``tests/test_masks.py::test_matches_reference``); only the way the work is
 scheduled differs. Frames are processed in batches instead of one at a time,
 the 2-D morphology is evaluated as two 1-D passes (``max`` is separable, so
-this changes nothing numerically) and a mask that the caller did not ask for is
-not computed at all.
+this changes nothing numerically), a mask that the caller did not ask for is
+not computed at all, and the EMA/morphology/binarisation stages reuse one
+``[F,H,W]`` buffer per mask instead of allocating one each.
 """
 
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ import torch
 import torch.nn.functional as F
 
 from .color import linear_to_srgb, luma709, srgb_to_linear
+from .frames import block_size
 
 OVER_THR = 0.95
 UNDER_THR = 0.01
@@ -24,17 +26,15 @@ K_SMOOTH = 9
 K_OPEN_CLOSE = 9
 BIN_THR = 0.2
 
-# Frames per morphology batch are derived from this pixel budget, so memory
-# stays bounded for long clips and for resolutions above 720p.
-CHUNK_PIXELS = 32 * 720 * 1280
-
 
 @dataclass
 class VideoMasks:
     """Binary masks ``[F,H,W]`` (1 = regenerate).
 
-    A mask whose flag was not set in :func:`video_masks` is returned as zeros
-    because it is never computed.
+    A mask whose flag was not set in :func:`video_masks` is returned as a zero-stride
+    view of a single zero because it is never computed. When only one flag is set,
+    ``combined`` is that mask itself, not a copy; none of the three may be modified
+    in place by the caller.
     """
 
     combined: torch.Tensor
@@ -63,11 +63,6 @@ def _erode(m: torch.Tensor, k: int) -> torch.Tensor:
 
 def _lin(v: float) -> float:
     return srgb_to_linear(torch.tensor(float(v))).item()
-
-
-def _chunk(height: int, width: int) -> int:
-    """Frames per batch for the given frame size."""
-    return max(1, CHUNK_PIXELS // max(1, height * width))
 
 
 def _soft_masks(frames: torch.Tensor, want_over: bool = True, want_under: bool = True):
@@ -126,17 +121,25 @@ def stabilize(soft: torch.Tensor, prev_ema: torch.Tensor | None) -> tuple[torch.
 
 
 def _stabilize_sequence(soft: torch.Tensor) -> torch.Tensor:
-    """Runs the temporal EMA over ``[F,H,W]`` and binarises the stabilised result."""
-    ema = torch.empty_like(soft)
-    prev = None
-    for i in range(soft.shape[0]):
-        ema[i] = soft[i] if prev is None else EMA_ALPHA * soft[i] + (1 - EMA_ALPHA) * prev
-        prev = ema[i]
-    out = torch.empty_like(soft)
-    step = _chunk(soft.shape[-2], soft.shape[-1])
+    """Temporal EMA, morphology and binarisation, all in place in ``soft``.
+
+    The EMA recurrence only ever reads the previous frame's state, and the morphology
+    is purely spatial, so the whole stage runs in the caller's buffer instead of
+    allocating a separate EMA, morphology and binarisation copy of the sequence.
+
+    Args:
+        soft: ``[F,H,W]`` soft mask, owned by the caller and overwritten here.
+
+    Returns:
+        torch.Tensor: ``soft``, now holding the binarised stabilised mask.
+    """
+    for i in range(1, soft.shape[0]):
+        soft[i] = EMA_ALPHA * soft[i] + (1 - EMA_ALPHA) * soft[i - 1]
+    step = block_size(soft.shape[-2], soft.shape[-1])
     for start in range(0, soft.shape[0], step):
-        out[start:start + step] = _morph(ema[start:start + step])
-    return (out > BIN_THR).float()
+        chunk = soft[start:start + step]
+        chunk.copy_(_morph(chunk) > BIN_THR)
+    return soft
 
 
 def video_masks(images: torch.Tensor, use_over: bool = True, use_under: bool = False) -> VideoMasks:
@@ -149,7 +152,10 @@ def video_masks(images: torch.Tensor, use_over: bool = True, use_under: bool = F
 
     Returns:
         VideoMasks with ``combined``, ``over`` and ``under`` of shape ``[F,H,W]``.
-        A mask whose flag is False is not computed and comes back as zeros.
+        A mask whose flag is False is not computed and comes back as a zero-stride
+        view of a single zero, which costs no memory. With only one flag set,
+        ``combined`` is the requested mask itself rather than a copy of it.
+        ``images`` is never modified.
 
     Raises:
         ValueError: If both flags are False.
@@ -158,26 +164,30 @@ def video_masks(images: torch.Tensor, use_over: bool = True, use_under: bool = F
         raise ValueError("Enable mask_overexposed and/or mask_underexposed, or connect a mask.")
     images = images.float()
     count, height, width = images.shape[:3]
-    zeros = torch.zeros((count, height, width), dtype=torch.float32, device=images.device)
+    shape = (count, height, width)
+    kwargs = {"dtype": torch.float32, "device": images.device}
 
-    soft_over = torch.empty_like(zeros) if use_over else None
-    soft_under = torch.empty_like(zeros) if use_under else None
-    step = _chunk(height, width)
+    # One full [F,H,W] buffer per requested mask: the soft mask is written here and the
+    # EMA, morphology and binarisation stages then run inside it.
+    over = torch.empty(shape, **kwargs) if use_over else None
+    under = torch.empty(shape, **kwargs) if use_under else None
+    step = block_size(height, width)
     for start in range(0, count, step):
-        over, under = _soft_masks(images[start:start + step], use_over, use_under)
+        soft_over, soft_under = _soft_masks(images[start:start + step], use_over, use_under)
         if use_over:
-            soft_over[start:start + step] = over
+            over[start:start + step] = soft_over
         if use_under:
-            soft_under[start:start + step] = under
+            under[start:start + step] = soft_under
 
-    over = _stabilize_sequence(soft_over) if use_over else zeros
-    under = _stabilize_sequence(soft_under) if use_under else zeros
-    combined = torch.zeros_like(over)
     if use_over:
-        combined = torch.maximum(combined, over)
+        _stabilize_sequence(over)
     if use_under:
-        combined = torch.maximum(combined, under)
-    return VideoMasks(combined=combined, over=over, under=under)
+        _stabilize_sequence(under)
+    combined = torch.maximum(over, under) if (use_over and use_under) else (over if use_over else under)
+    zeros = torch.zeros((1, 1, 1), **kwargs).expand(shape)
+    return VideoMasks(combined=combined,
+                      over=over if use_over else zeros,
+                      under=under if use_under else zeros)
 
 
 def paint_underexposed(images: torch.Tensor, under: torch.Tensor) -> torch.Tensor:

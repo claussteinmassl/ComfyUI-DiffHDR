@@ -8,6 +8,16 @@ import torch.nn.functional as F
 RESIZE_MODES = ("crop_to_720p", "native", "custom")
 TRAINED_TOKENS = 9 * 45 * 80  # latent frames x (720/16) x (1280/16)
 
+# Frames per processing block, derived from this pixel budget (32 frames at 720p).
+# Element-wise stages run block by block so their temporaries stay bounded instead of
+# growing with the clip length; the results are unaffected.
+BLOCK_PIXELS = 32 * 720 * 1280
+
+
+def block_size(height: int, width: int) -> int:
+    """Frames per processing block for the given frame size."""
+    return max(1, BLOCK_PIXELS // max(1, height * width))
+
 
 def _round16(v: int) -> int:
     return max(16, int(round(v / 16)) * 16)
@@ -60,8 +70,10 @@ def fit(images: torch.Tensor, height: int, width: int, crop: bool = True) -> tor
     x = images.detach().cpu().float().movedim(-1, 1)
     if crop:
         x = _center_crop_to_aspect(x, height, width)
+    # ``interpolate`` already returns a tensor this function owns, so clamp it in place
+    # instead of allocating a second full-size copy.
     x = F.interpolate(x, size=(height, width), mode="bicubic", antialias=True, align_corners=False)
-    return x.clamp(0, 1).movedim(1, -1)
+    return x.clamp_(0, 1).movedim(1, -1)
 
 
 def fit_mask(mask: torch.Tensor, height: int, width: int, crop: bool = True) -> torch.Tensor:

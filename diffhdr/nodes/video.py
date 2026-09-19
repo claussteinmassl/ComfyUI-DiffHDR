@@ -49,7 +49,6 @@ class DiffHDRVideo(io.ComfyNode):
             dvae.check_wan_vae(vae)
             images = images[..., :3]
             h, w = frames.resolve_size(images.shape[1], images.shape[2], resize_mode, height, width)
-            images = frames.fit(images, h, w, crop=True)
             if mask is not None:
                 mask = frames.fit_mask(mask if mask.dim() == 3 else mask[None], h, w, crop=True)
             if reference_image is not None:
@@ -66,9 +65,12 @@ class DiffHDRVideo(io.ComfyNode):
             patched = sampling.prepare_model(model, "standard", attention)
         window_fn = backend.make_window_fn(patched, dvae.get_vae(vae, vae_precision), positive, negative,
                                            steps, seed, on_step=lambda: pbar.update(1), timer=timer)
+        # The clip is resized inside the pipeline (fit_to) so that this node never holds a
+        # second full-size copy of it while the windows are sampled.
         result = pipeline.run_video(images, window_fn, user_mask=mask, mask_overexposed=mask_overexposed,
                                     mask_underexposed=mask_underexposed, reference=reference_image,
                                     reference_ev=reference_ev, window_size=size, window_stride=window_stride,
-                                    use_prev_window_reference=use_prev_window_reference, timer=timer)
+                                    use_prev_window_reference=use_prev_window_reference, fit_to=(h, w),
+                                    timer=timer)
         timing.log_timing(timing.node_context("image" if total == 1 else "video", total, n_windows, steps), timer)
         return io.NodeOutput(result.hdr, result.mask)
