@@ -21,6 +21,42 @@ def _has_comfy() -> bool:
     return importlib.util.find_spec("comfy") is not None
 
 
+def _accelerator_available() -> bool:
+    import torch
+    checks = (lambda: torch.cuda.is_available(),
+              lambda: torch.backends.mps.is_available(),
+              lambda: torch.xpu.is_available())
+    for check in checks:
+        try:
+            if check():
+                return True
+        except Exception:                               # pragma: no cover - backend absent
+            pass
+    return False
+
+
+def _should_force_cpu() -> bool:
+    """True when ComfyUI is importable but the machine has no accelerator at all."""
+    return _has_comfy() and not _accelerator_available()
+
+
+def _use_cpu_if_no_accelerator() -> None:
+    """Tells ComfyUI to stay on the CPU when the machine has no accelerator.
+
+    ``comfy.model_management`` resolves the torch device while it is imported and
+    asserts ("Torch not compiled with CUDA enabled") when it finds none, which is
+    exactly the situation on a CPU-only CI runner. Setting the flag that ``--cpu``
+    would set has to happen before the first ComfyUI import, so it happens here.
+    """
+    if not _should_force_cpu():
+        return
+    from comfy.cli_args import args
+    args.cpu = True
+
+
+_use_cpu_if_no_accelerator()
+
+
 def require_comfy() -> bool:
     """True when ``DIFFHDR_REQUIRE_COMFY`` demands that the ComfyUI tests actually run."""
     return os.environ.get("DIFFHDR_REQUIRE_COMFY", "").strip().lower() not in ("", "0", "false", "no")
