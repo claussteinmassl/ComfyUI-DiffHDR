@@ -95,9 +95,15 @@ def read_hdr(path) -> np.ndarray:
 
 
 def sequence_paths(folder, prefix: str, counter: int, count: int, start_frame: int, ext: str) -> list[Path]:
-    """Output paths: one file ``<prefix>_<counter>.<ext>`` or a folder of ``frame_%04d.<ext>``."""
+    """Output paths: one file ``<prefix>_<counter>.<ext>`` or a folder of zero-padded frames.
+
+    Frame numbers use a single padding width for the whole sequence -- at least four
+    digits, more when the last frame needs them -- so the files stay in lexical order
+    even when the sequence crosses 9999.
+    """
     folder = Path(folder)
     stem = f"{prefix}_{counter:05d}"
     if count == 1:
         return [folder / f"{stem}.{ext}"]
-    return [folder / stem / f"frame_{start_frame + i:04d}.{ext}" for i in range(count)]
+    pad = max(4, len(str(start_frame + count - 1)))
+    return [folder / stem / f"frame_{start_frame + i:0{pad}d}.{ext}" for i in range(count)]

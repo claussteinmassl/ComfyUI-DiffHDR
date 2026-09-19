@@ -348,7 +348,8 @@ numbers above.
   tools read the file correctly regardless of which primaries you picked.
 - A batch of frames is written as `<filename_prefix>_<counter>/frame_####.exr`; a single image is
   written directly under `filename_prefix`. `start_frame` sets the first frame number in a
-  sequence.
+  sequence. Frame numbers are padded to at least four digits, widened for the whole sequence
+  when the last frame needs more, so the files always stay in lexical order.
 
 ## Limitations
 

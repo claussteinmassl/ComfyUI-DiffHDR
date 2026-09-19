@@ -2,17 +2,13 @@
 
 import importlib.util
 
-if importlib.util.find_spec("comfy_api") is None:
+# ``__package__`` is empty when this file is executed as a plain top-level module
+# (a script, or a spec without ``submodule_search_locations``); the relative import
+# below is impossible then. ComfyUI always loads it as a package, so any ImportError
+# raised there is a genuine one and must propagate.
+if not __package__ or importlib.util.find_spec("comfy_api") is None:
     comfy_entrypoint = None
 else:
-    try:
-        from .diffhdr.nodes import comfy_entrypoint
-    except ImportError as e:
-        # This happens when imported without proper package context (e.g., pytest)
-        if "attempted relative import with no known parent package" in str(e):
-            comfy_entrypoint = None
-        else:
-            # Real import error - re-raise it
-            raise
+    from .diffhdr.nodes import comfy_entrypoint
 
 __all__ = ["comfy_entrypoint"]

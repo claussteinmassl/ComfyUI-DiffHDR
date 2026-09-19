@@ -28,7 +28,7 @@ class DiffHDRSaveEXR(io.ComfyNode):
                 io.Combo.Input("compression", options=list(exr.COMPRESSIONS), default="zip", tooltip="EXR compression. dwaa/dwab are lossy; zip/piz are lossless."),
                 io.Float.Input("dwa_compression_level", default=45.0, min=0.0, max=500.0, step=1.0, tooltip="DWAA/DWAB compression level (dwaCompressionLevel). Higher = smaller and lossier. 45 is the OpenEXR default."),
                 io.Combo.Input("colorspace", options=list(color.COLORSPACES), default="linear_rec709", tooltip="Output primaries. Pixels are converted and chromaticities are written to the header."),
-                io.Int.Input("start_frame", default=1, min=0, max=9999999, tooltip="Frame number of the first file in a sequence."),
+                io.Int.Input("start_frame", default=1, min=0, max=9999999, tooltip="Frame number of the first file in a sequence. Numbers are padded to at least four digits, widened for the whole sequence when the last frame needs more."),
                 io.Float.Input("preview_exposure", default=0.0, min=-16.0, max=16.0, step=0.25, tooltip="Exposure in stops for the tonemapped UI preview."),
             ],
             outputs=[],

@@ -14,6 +14,18 @@ def test_load_bundled_pads(tmp_path, monkeypatch):
     assert cond[0, :3].eq(1).all() and cond[0, 3:].eq(0).all()
 
 
+def test_load_bundled_returns_a_private_copy(tmp_path, monkeypatch):
+    """An in-place op on the returned tensor must not poison the cache."""
+    save_file({"cond": torch.ones(1, 512, 4096)}, str(tmp_path / "diffhdr_empty.safetensors"))
+    monkeypatch.setattr(embeddings, "ASSET_DIR", tmp_path)
+    embeddings._cache.clear()
+    first = embeddings.load_bundled("empty")
+    first.zero_()
+    second = embeddings.load_bundled("empty")
+    assert second.eq(1).all()
+    assert second.data_ptr() != first.data_ptr()
+
+
 def test_missing_asset(tmp_path, monkeypatch):
     monkeypatch.setattr(embeddings, "ASSET_DIR", tmp_path)
     embeddings._cache.clear()

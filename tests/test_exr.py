@@ -81,3 +81,13 @@ def test_sequence_paths(tmp_path):
     assert paths[0].parent.name == "shot_00007"
     single = exr.sequence_paths(tmp_path, "shot", 7, 1, start_frame=1, ext="hdr")
     assert single == [tmp_path / "shot_00007.hdr"]
+
+
+def test_sequence_paths_widen_when_crossing_9999(tmp_path):
+    """One padding width for the whole sequence keeps lexical order across 9999."""
+    paths = exr.sequence_paths(tmp_path, "shot", 1, 4, start_frame=9998, ext="exr")
+    assert [p.name for p in paths] == ["frame_09998.exr", "frame_09999.exr",
+                                       "frame_10000.exr", "frame_10001.exr"]
+    assert [p.name for p in paths] == sorted(p.name for p in paths)
+    wide = exr.sequence_paths(tmp_path, "shot", 1, 2, start_frame=1000000, ext="exr")
+    assert [p.name for p in wide] == ["frame_1000000.exr", "frame_1000001.exr"]

@@ -10,6 +10,24 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_root_package_without_package_context():
+    """Loaded as a plain top-level module (no package context) the entrypoint is None.
+
+    The root ``__init__.py`` must decide this structurally (``__package__`` is empty),
+    not by string-matching CPython's relative-import error message.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "diffhdr_root_no_package", REPO_ROOT / "__init__.py", submodule_search_locations=None)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        assert not module.__package__
+        assert module.comfy_entrypoint is None
+    finally:
+        sys.modules.pop("diffhdr_root_no_package", None)
+
+
 @pytest.mark.requires_comfy
 def test_root_package_comfy_import():
     """Test that root __init__.py imports correctly when loaded as ComfyUI does.

@@ -19,7 +19,8 @@ def load_bundled(name: str) -> torch.Tensor:
         name: Asset base name (``empty`` or ``pano``).
 
     Returns:
-        torch.Tensor: The cached ``[1,512,4096]`` float32 embedding.
+        torch.Tensor: A fresh copy of the cached ``[1,512,4096]`` float32 embedding, so an
+        in-place operation downstream cannot poison the cache.
 
     Raises:
         RuntimeError: If the asset is missing.
@@ -33,7 +34,7 @@ def load_bundled(name: str) -> torch.Tensor:
         if cond.shape[1] < SEQ_LEN:
             cond = torch.nn.functional.pad(cond, (0, 0, 0, SEQ_LEN - cond.shape[1]))
         _cache[name] = cond
-    return _cache[name]
+    return _cache[name].clone()
 
 
 def get_conditioning(clip, prompt: str, variant: str):
