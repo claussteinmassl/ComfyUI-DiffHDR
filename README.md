@@ -1,15 +1,154 @@
 # ComfyUI-DiffHDR
 
-LDR-to-HDR reconstruction for images, videos and equirectangular HDRI panoramas, built on ComfyUI's
-native Wan2.1-VACE-14B objects. This is a from-scratch ComfyUI port of
-[DiffHDR](https://github.com/Eyeline-Labs/DiffHDR) (Eyeline Labs) — it reimplements DiffHDR's mask
-detection, log-color encoding and long-video blending on top of ComfyUI's own `MODEL`/`VAE`/`CLIP`
-objects, VACE conditioning and sampler, instead of vendoring DiffSynth-Studio.
+Turn clipped 8-bit footage into linear, scene-referred HDR inside ComfyUI. This is a from-scratch
+port of [DiffHDR](https://github.com/Eyeline-Labs/DiffHDR) (Eyeline Labs) onto ComfyUI's native
+Wan2.1-VACE-14B objects — no VACE fork, no bundled inference engine.
 
-## Status
+![LDR input against the reconstructed HDR shown four stops down](assets/readme/hero.jpg)
 
-Validated end-to-end against the reference implementation on an NVIDIA A100 80GB PCIe, using
-byte-identical pre-sized inputs and the reference default of 50 sampling steps on both sides.
+*One frame of the demo clip. Left: the clipped LDR input. Right: the reconstructed HDR displayed at
+−4 EV — the windows that were flat white now hold their tracery and the view outside.*
+
+## What it is
+
+DiffHDR treats LDR-to-HDR conversion as a generative radiance-inpainting problem inside the latent
+space of a video diffusion model (Wan2.1-VACE-14B). It works in a log-gamma color space and uses
+the video model's spatio-temporal priors to synthesize plausible detail in over- and under-exposed
+regions while recovering continuous radiance in the correctly-exposed ones. This pack exposes that
+as seven native `DiffHDR*` nodes that plug into stock `UNETLoader` / `VAELoader` / `CLIPLoader` /
+`WanVaceToVideo` / `KSampler` objects, in three modes:
+
+- **Image** — a single clipped LDR frame in, one linear HDR frame out.
+- **Video** — an LDR frame sequence in; long clips run as overlapping, blended sliding windows.
+- **HDRI (panorama)** — a clipped equirectangular LDR panorama in, a full HDR environment map out,
+  using a separate LoRA trained for panoramas.
+
+## Installation
+
+1. Clone this repository into `ComfyUI/custom_nodes/ComfyUI-DiffHDR`:
+   `git clone https://github.com/cs-agentic/ComfyUI-DiffHDR.git ComfyUI/custom_nodes/ComfyUI-DiffHDR`
+2. `pip install -r requirements.txt` inside your ComfyUI Python environment (adds `OpenEXR` and
+   `huggingface_hub`; `torch` and `safetensors` are assumed to already be provided by ComfyUI).
+3. Download the Wan2.1-VACE-14B model and the Wan 2.1 VAE into the usual ComfyUI model folders.
+4. Restart ComfyUI. The nodes register under the **DiffHDR** category.
+
+| Model | File | Source | Folder |
+|---|---|---|---|
+| Wan2.1 VACE 14B | `wan2.1_vace_14B_fp16.safetensors` | [`Comfy-Org/Wan_2.1_ComfyUI_repackaged`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/diffusion_models) (`split_files/diffusion_models/`) | `models/diffusion_models` |
+| Wan2.1 VACE 14B GGUF (low memory / Apple Silicon) | e.g. `Wan2.1_14B_VACE-Q4_K_M.gguf`, `Q5_K_M`, `Q8_0` | [`QuantStack/Wan2.1_14B_VACE-GGUF`](https://huggingface.co/QuantStack/Wan2.1_14B_VACE-GGUF) — requires the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom node (`UnetLoaderGGUF` in place of `UNETLoader`) | `models/diffusion_models` |
+| Wan 2.1 VAE | `wan_2.1_vae.safetensors` | same Comfy-Org repo ([`split_files/vae/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/vae)) | `models/vae` |
+| umT5-xxl (**optional** — only for custom prompts) | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | same Comfy-Org repo ([`split_files/text_encoders/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/text_encoders)) | `models/text_encoders` |
+| DiffHDR LoRAs | `DiffHDR.safetensors` (image/video), `DiffHDR_Pano.safetensors` (HDRI) | [`ZhengmingYu/DiffHDR`](https://huggingface.co/ZhengmingYu/DiffHDR) — downloaded automatically | `models/loras/DiffHDR` |
+
+Wan2.1-VACE-14B and the Wan 2.1 VAE are the same checkpoints any native ComfyUI VACE workflow uses.
+**The DiffHDR LoRA is fetched automatically** the first time a DiffHDR node runs. All filenames
+above were verified against the current file listing of each Hugging Face repository, and every one
+of them was downloaded and run end-to-end during GPU validation.
+
+**The text encoder is optional.** DiffHDR was trained with an empty prompt for images/video and a
+fixed prompt for panoramas, so both all-in-one nodes ship with exactly those embeddings baked in
+(`assets/embeds/`) and run with **no CLIP model loaded at all**. Leave `clip` unconnected and you
+save the ~11 GB umT5-xxl download and its load time; the `prompt` widget is then ignored. Connect a
+umT5-xxl CLIP (`CLIPLoader`, type `wan`) only if you want to experiment with your own prompts.
+
+## Usage
+
+Four example workflows are in `workflows/` (ComfyUI UI-format JSON, load with **Open** or
+drag-and-drop): `diffhdr_image.json`, `diffhdr_video.json`, `diffhdr_hdri.json` and
+`diffhdr_modular.json`. All of them reference `wan2.1_vace_14B_fp16.safetensors`,
+`wan_2.1_vae.safetensors` and `umt5_xxl_fp8_e4m3fn_scaled.safetensors` — set the loader widgets to
+match whatever you actually have installed if you use the GGUF or a different precision.
+
+### Quick start: the all-in-one node
+
+![The diffhdr_video.json example workflow in the ComfyUI graph editor](assets/readme/workflow-simple.jpg)
+
+`workflows/diffhdr_video.json` — everything under one hood: `UNETLoader` + `VAELoader` +
+`CLIPLoader` (type `wan`) + `LoadVideo` + `GetVideoComponents` (core ComfyUI video nodes, no
+VideoHelperSuite dependency) → **DiffHDR (Image / Video)** → `DiffHDR Save EXR` and
+`DiffHDR Tonemap Preview` → `PreviewImage`. `diffhdr_image.json` is the same graph with `LoadImage`
+instead of the video loader; `diffhdr_hdri.json` feeds an equirectangular panorama into
+**DiffHDR HDRI (Panorama)**. The inputs that matter:
+
+- **`steps`** — 50 reproduces the published setting, 20 is usually the best trade-off, 10 is for
+  iterating. See *Performance and how many steps?* below.
+- **`resize_mode`** — `crop_to_720p` centre-crops and resizes to the 1280×720 training resolution
+  (720×1280 for portrait); `native` keeps your size floored to multiples of 16; `custom` uses the
+  `width`/`height` widgets.
+- **Masks** — `mask_overexposed` (on by default) and `mask_underexposed` choose what gets
+  regenerated. The optional `mask` input overrides the automatic detection entirely, and
+  `reference_image` (boosted by `reference_ev`, default 5 stops) guides the content of clipped
+  regions.
+- **Long video** — clips longer than `window_size` (4n+1, default 33 = the training length) are
+  processed as sliding windows starting every `window_stride` frames (default 16) and blended;
+  `use_prev_window_reference` feeds each window the previous one's output for tighter temporal
+  consistency.
+- **`attention`** — `auto` picks flash-attn, then SageAttention, else ComfyUI's default, with an
+  automatic PyTorch SDPA fallback.
+- **`vae_precision`** — `fp32` is recommended; `as_loaded` saves memory but can band the highlights.
+
+### Modular graph
+
+![The diffhdr_modular.json example workflow in the ComfyUI graph editor](assets/readme/workflow-modular.jpg)
+
+`workflows/diffhdr_modular.json` rebuilds the same pipeline out of individual nodes on a native
+VACE graph: `DiffHDR Apply LoRA` → `ModelSamplingSD3` (shift 5), `DiffHDR Preprocess` →
+`WanVaceToVideo` (conditioned by `CLIPTextEncode`) → `KSampler` (`euler` / `simple`, `cfg` 1) →
+`TrimVideoLatent` → `VAEDecode` → `DiffHDR Postprocess` → save / tonemap / preview. Use it when you
+need to combine DiffHDR with other VACE controls or additional LoRAs, since every step is a
+separate node you can reach into.
+
+### Nodes
+
+| Node | What it does |
+|---|---|
+| **DiffHDR (Image / Video)** (`DiffHDRVideo`) | All-in-one reconstruction for a single image or a frame sequence, including long-video windowing. |
+| **DiffHDR HDRI (Panorama)** (`DiffHDRPano`) | All-in-one reconstruction of an HDR environment map from an equirectangular LDR panorama. |
+| **DiffHDR Apply LoRA** (`DiffHDRApplyLora`) | Downloads and patches the DiffHDR LoRA into a Wan2.1-VACE-14B model, for modular graphs. |
+| **DiffHDR Preprocess** (`DiffHDRPreprocess`) | Builds the log-encoded control video and the regeneration mask for `WanVaceToVideo`. |
+| **DiffHDR Postprocess** (`DiffHDRPostprocess`) | Decodes the DiffHDR log curve back to linear HDR after `VAE Decode`. |
+| **DiffHDR Tonemap Preview** (`DiffHDRTonemap`) | Converts linear HDR to displayable sRGB for preview or LDR export. |
+| **DiffHDR Save EXR** (`DiffHDRSaveEXR`) | Writes linear HDR as OpenEXR (single file or sequence) or Radiance `.hdr`. |
+
+Every input is documented in *Full node reference* below.
+
+### Saving EXR
+
+`DiffHDR Save EXR` writes `half` (16-bit) or `float` (32-bit) OpenEXR with `none`, `rle`, `zips`,
+`zip`, `piz`, `pxr24`, `b44`, `b44a` or lossy `dwaa` / `dwab` compression (`dwa_compression_level`,
+default 45, applies to the last two), or Radiance `.hdr`. `colorspace` converts the pixels to
+`linear_rec709`, `acescg` or `aces2065_1` and writes the matching chromaticities into the header. A
+batch becomes `<filename_prefix>_<counter>/frame_####.exr` starting at `start_frame`; a single image
+is written directly under `filename_prefix`.
+
+## Results
+
+![The reference implementation and this pack on the same frame, at 0 EV and −4 EV](assets/readme/results-parity.jpg)
+
+*Same input, same seed, same 50 sampling steps: the reference implementation and this pack, shown
+at 0 EV and −4 EV. Log-space PSNR outside the mask for this clip is 59.1 dB, against a 42.1 dB
+floor between two runs of the reference itself.*
+
+![The same frame reconstructed with 50 and with 10 sampling steps](assets/readme/results-steps.jpg)
+
+*50 against 10 sampling steps on the test image, at −4 EV with a crop on the brightest
+reconstructed highlight. Ten steps is fine for iterating, but it reconstructs a flatter highlight:
+masked p99.9 luminance 5.61 against 8.87, peak 6.4 against 15.0.*
+
+![An HDRI panorama output at 0 EV and −4 EV](assets/readme/results-panorama.jpg)
+
+*HDRI mode: a clipped equirectangular LDR panorama reconstructed into a 2048×1024 environment map.
+Four stops down, the sun and its reflection separate out of what was a flat white sky.*
+
+The pictures above derive from the DiffHDR demo media (Apache-2.0).
+
+## Details
+
+<details>
+<summary><b>Validation against the reference implementation</b></summary>
+
+Validated end-to-end on an NVIDIA A100 80GB PCIe, using byte-identical pre-sized inputs and the
+reference default of 50 sampling steps on both sides.
 
 | Case | Mask IoU vs reference mask code | Log-space PSNR outside the mask | Reference's own seed-to-seed PSNR |
 |---|---|---|---|
@@ -19,6 +158,10 @@ byte-identical pre-sized inputs and the reference default of 50 sampling steps o
 | Long video, 65 frames, 3 blended windows | 1.000000 | **53.4 dB** | 33.2 dB |
 | HDRI panorama (2048×1024) | 1.000000 | **51.1 dB** | — |
 
+Wherever a reference seed-to-seed floor could be measured, the output is *closer to the reference*
+than two runs of the reference itself (with different seeds) are to each other, and the exposure
+masks are bit-identical to the reference algorithm in every case.
+
 The 99-frame run covers the full demo sequence, so the last window is short (19 real frames) and is
 padded to the trained length by repeating the last frame, exactly as the reference does. Inside the
 reconstructed region the two agree to within 5 % on p99.9 luminance (25.4 vs 24.2) and 0.3 % on the
@@ -26,171 +169,27 @@ mean log value (0.4255 vs 0.4244), and the largest frame-to-frame step in masked
 window boundary is 0.0035 against a median of 0.0014 over a 0.377–0.450 range — i.e. no visible
 seam, including at the padded last window.
 
-Wherever a reference seed-to-seed floor could be measured, the output is *closer to the reference*
-than two runs of the reference itself (with different seeds) are to each other, and the exposure
-masks are bit-identical to the reference algorithm in every case. Inside the reconstructed (masked) region the robust highlight statistics agree closely
-— e.g. for the 33-frame video p99.9 luminance 3.82 vs 3.72 and mean log value 0.4004 vs 0.3995 —
-while the single brightest pixel is not a meaningful comparison, because the reference's own two
-seeds differ on it by a factor of ~4 (p99.9 of 3.72 vs 13.65 between reference seeds 10 and 11).
+Inside the reconstructed (masked) region the robust highlight statistics agree closely — e.g. for
+the 33-frame video p99.9 luminance 3.82 vs 3.72 and mean log value 0.4004 vs 0.3995 — while the
+single brightest pixel is not a meaningful comparison, because the reference's own two seeds differ
+on it by a factor of ~4 (p99.9 of 3.72 vs 13.65 between reference seeds 10 and 11).
 
 Also verified on real weights: the DiffHDR LoRA downloads from a clean install and applies exactly
 80 patches for both variants; the float32 VAE working copy really is float32 in all 194 parameters
 (the checkpoint otherwise loads as bfloat16); and the sampler schedule matches the reference's
 `linspace(1, 0, N+1)[:-1]` with shift 5 to within 6e-8 at 50, 20 and 10 steps.
 
-## What it is
+**The bundled text embeddings** (`assets/embeds/`, produced with ComfyUI's own umT5-xxl encoder by
+`scripts/make_embeds.py`) were verified on the GPU too: cosine similarity against the DiffSynth
+prompter output used by the reference implementation is 0.999997 (empty prompt) and 0.99982
+(panorama prompt) — closer than the reference's own bfloat16 run is to its float32 run (0.99996 /
+0.99955). A 33-frame video reconstructed with the bundled embeddings matches the same run with a
+live `CLIPLoader` at **85.5 dB** log-space PSNR.
 
-DiffHDR turns clipped, 8-bit LDR footage into linear, scene-referred HDR by treating LDR-to-HDR
-conversion as a generative radiance-inpainting problem inside the latent space of a video diffusion
-model (Wan2.1-VACE-14B). It works in a log-gamma color space and uses spatio-temporal priors from
-the video model to synthesize plausible detail in over- and under-exposed regions while recovering
-continuous radiance in the correctly-exposed ones. This pack exposes that as native ComfyUI nodes:
-seven `DiffHDR*` nodes that plug into stock `UNETLoader` / `VAELoader` / `CLIPLoader` /
-`WanVaceToVideo` / `KSampler` objects — no VACE fork, no bundled inference engine.
+</details>
 
-Three ways to use it:
-
-- **Image**: a single clipped LDR frame in, one linear HDR frame out.
-- **Video**: an LDR frame sequence in; long clips are processed as overlapping, blended sliding
-  windows.
-- **HDRI (panorama)**: a clipped equirectangular LDR panorama in, a full HDR environment map out,
-  using a separate LoRA trained for panoramas.
-
-## Requirements & model downloads
-
-Wan2.1-VACE-14B and the Wan 2.1 VAE are the same checkpoints used by any native ComfyUI VACE
-workflow; the DiffHDR LoRA is downloaded automatically on first use.
-
-| Model | File | Source | Folder |
-|---|---|---|---|
-| Wan2.1 VACE 14B | `wan2.1_vace_14B_fp16.safetensors` | [`Comfy-Org/Wan_2.1_ComfyUI_repackaged`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/diffusion_models) (`split_files/diffusion_models/`) | `models/diffusion_models` |
-| Wan2.1 VACE 14B GGUF (low memory / Apple Silicon) | e.g. `Wan2.1_14B_VACE-Q4_K_M.gguf`, `Q5_K_M`, `Q8_0` | [`QuantStack/Wan2.1_14B_VACE-GGUF`](https://huggingface.co/QuantStack/Wan2.1_14B_VACE-GGUF) — requires the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom node (`UnetLoaderGGUF` in place of `UNETLoader`) | `models/diffusion_models` |
-| Wan 2.1 VAE | `wan_2.1_vae.safetensors` | same Comfy-Org repo ([`split_files/vae/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/vae)) | `models/vae` |
-| umT5-xxl (**optional** — only for custom prompts, see below) | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | same Comfy-Org repo ([`split_files/text_encoders/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/text_encoders)) | `models/text_encoders` |
-| DiffHDR LoRAs | `DiffHDR.safetensors` (image/video), `DiffHDR_Pano.safetensors` (HDRI) | [`ZhengmingYu/DiffHDR`](https://huggingface.co/ZhengmingYu/DiffHDR) — downloaded automatically | `models/loras/DiffHDR` |
-
-All filenames above were verified against the current file listing of each Hugging Face repository,
-and every one of them was downloaded and run end-to-end during GPU validation.
-
-**About the CLIP input — optional**: DiffHDR was trained with an empty prompt for images/video and
-a fixed prompt for panoramas, so both all-in-one nodes ship with exactly those embeddings baked in
-(`assets/embeds/`) and run with **no CLIP model loaded at all**. Leave `clip` unconnected and you
-save the ~11 GB umT5-xxl download and its load time; the `prompt` widget is then ignored.
-
-The bundled embeddings were produced with ComfyUI's own umT5-xxl encoder (`scripts/make_embeds.py`)
-and verified on the GPU: cosine similarity against the DiffSynth prompter output used by the
-reference implementation is 0.999997 (empty prompt) and 0.99982 (panorama prompt) — closer than the
-reference's own bfloat16 run is to its float32 run (0.99996 / 0.99955). A 33-frame video
-reconstructed with the bundled embeddings matches the same run with a live `CLIPLoader` at
-**85.5 dB** log-space PSNR. Connect a umT5-xxl CLIP (`CLIPLoader`, type `wan`) only if you want to
-experiment with your own prompts.
-
-## Installation
-
-1. Clone this repository into `ComfyUI/custom_nodes/ComfyUI-DiffHDR`:
-   `git clone https://github.com/cs-agentic/ComfyUI-DiffHDR.git ComfyUI/custom_nodes/ComfyUI-DiffHDR`
-2. `pip install -r requirements.txt` inside your ComfyUI Python environment (adds `OpenEXR` and
-   `huggingface_hub`; `torch` and `safetensors` are assumed to already be provided by ComfyUI).
-3. Download the Wan2.1-VACE-14B model and Wan 2.1 VAE from the table above into the usual ComfyUI
-   model folders. The DiffHDR LoRA is fetched automatically the first time a DiffHDR node runs.
-4. Restart ComfyUI. The nodes register under the **DiffHDR** category.
-
-## Nodes
-
-### DiffHDR (Image / Video) — `DiffHDRVideo`
-
-All-in-one reconstruction for a single image or a frame sequence. One frame runs in image mode; up
-to `window_size` frames run as a single window; more frames run as overlapping, blended sliding
-windows.
-
-- **Inputs**: `model` (Wan2.1-VACE-14B), `vae` (Wan 2.1 VAE), `images` (LDR image or batch),
-  `clip` (optional umT5-xxl; see above), `prompt` (only used with `clip` connected), `mask`
-  (optional, overrides automatic detection), `reference_image` (optional, guides content of
-  over-exposed regions), `reference_ev` (exposure boost applied to the reference, default 5 stops),
-  `resize_mode` (`crop_to_720p` / `native` / `custom`), `width`, `height` (for `custom`), `steps`
-  (default 50), `seed`, `mask_overexposed`, `mask_underexposed`, `window_size` (frames per window,
-  4n+1, default 33 — the training length), `window_stride` (frames between window starts, default
-  16), `use_prev_window_reference` (temporal consistency across windows for long videos),
-  `attention`, `vae_precision`.
-- **Outputs**: `hdr` (linear scene-referred HDR image/batch), `mask` (regenerated regions).
-
-### DiffHDR HDRI (Panorama) — `DiffHDRPano`
-
-Reconstructs an HDR environment map from a single clipped, equirectangular LDR panorama using the
-DiffHDR panorama LoRA.
-
-- **Inputs**: `model`, `vae`, `image` (equirectangular, 2:1; only the first frame of a batch is
-  used), `clip` (optional), `prompt` (defaults to the training prompt, only used with `clip`
-  connected), `mask` (optional), `width` (default 2048), `height` (default 1024 — the panorama is
-  stretched to this size, not cropped), `steps` (default 50), `seed`, `attention`, `vae_precision`.
-- **Outputs**: `hdr`, `mask`.
-
-### DiffHDR Apply LoRA — `DiffHDRApplyLora`
-
-For modular graphs: downloads (on first use) and patches the DiffHDR LoRA into a Wan2.1-VACE-14B
-model. Follow with `ModelSamplingSD3` (shift 5), and sample with `euler` / `simple`, `cfg` 1.
-
-- **Inputs**: `model`, `variant` (`standard`: image/video, `pano`: HDRI), `strength` (default 1.0).
-- **Outputs**: `model`.
-
-### DiffHDR Preprocess — `DiffHDRPreprocess`
-
-Builds the log-encoded control video and regeneration mask for a native `WanVaceToVideo` graph.
-
-- **Inputs**: `images` (sRGB LDR frames, sized to multiples of 16), `variant` (`video` / `pano`
-  mask detector), `mask_overexposed`, `mask_underexposed`.
-- **Outputs**: `control_video` (log-encoded frames, feed to `WanVaceToVideo.control_video`),
-  `control_masks` (feed to `WanVaceToVideo.control_masks`).
-
-### DiffHDR Postprocess — `DiffHDRPostprocess`
-
-Decodes the DiffHDR log curve to linear HDR after `VAE Decode` in a modular graph.
-
-- **Inputs**: `images` (VAE-decoded, log-encoded frames).
-- **Outputs**: `hdr` (linear HDR).
-
-### DiffHDR Tonemap Preview — `DiffHDRTonemap`
-
-Converts linear HDR to a displayable sRGB image, for `PreviewImage` or an LDR export.
-
-- **Inputs**: `hdr`, `exposure` (stops, default 0), `operator` (`reinhard` compresses highlights,
-  `clip` shows the LDR range at the chosen exposure as-is).
-- **Outputs**: `image` (sRGB, `[0,1]`).
-
-### DiffHDR Save EXR — `DiffHDRSaveEXR`
-
-Writes linear HDR as OpenEXR (single file or frame sequence) or Radiance `.hdr`.
-
-- **Inputs**: `images` (linear Rec.709 HDR image or batch), `filename_prefix` (default
-  `DiffHDR/hdr`), `format` (`exr` / `hdr`), `bit_depth` (`half` / `float`), `compression` (`none`,
-  `rle`, `zips`, `zip`, `piz`, `pxr24`, `b44`, `b44a`, `dwaa`, `dwab`), `dwa_compression_level`
-  (default 45, only used by `dwaa`/`dwab`), `colorspace` (`linear_rec709` / `acescg` /
-  `aces2065_1`), `start_frame` (first frame number of a sequence), `preview_exposure` (exposure for
-  the tonemapped UI preview only).
-- **Outputs**: none (output node; also emits a tonemapped preview in the UI).
-
-## Workflows
-
-Four example workflows are in `workflows/` (ComfyUI UI-format JSON, load with **Open** or
-drag-and-drop). All of them reference `wan2.1_vace_14B_fp16.safetensors`,
-`wan_2.1_vae.safetensors` and `umt5_xxl_fp8_e4m3fn_scaled.safetensors` — set the loader widgets to
-match whatever you actually have installed if you used the GGUF or a different precision.
-
-- **`diffhdr_image.json`** — the simplest graph: `UNETLoader` + `VAELoader` + `CLIPLoader` (type
-  `wan`) + `LoadImage` into `DiffHDR (Image / Video)`, then `DiffHDR Save EXR` and
-  `DiffHDR Tonemap Preview` → `PreviewImage`.
-- **`diffhdr_video.json`** — the same all-in-one node fed by `LoadVideo` + `GetVideoComponents`
-  (core ComfyUI video nodes, no VideoHelperSuite dependency) instead of `LoadImage`.
-- **`diffhdr_hdri.json`** — `LoadImage` (equirectangular panorama) into
-  `DiffHDR HDRI (Panorama)`, then save/tonemap/preview.
-- **`diffhdr_modular.json`** — the fully manual native-VACE graph:
-  `DiffHDR Apply LoRA` → `ModelSamplingSD3` (shift 5); `LoadVideo` + `GetVideoComponents` →
-  `DiffHDR Preprocess` → `WanVaceToVideo` (conditioned by `CLIPTextEncode`) → `KSampler`
-  (`euler` / `simple`, `cfg` 1) → `TrimVideoLatent` → `VAEDecode` → `DiffHDR Postprocess` → save /
-  tonemap / preview. Use this as a starting point when you need to combine DiffHDR with other VACE
-  controls or additional LoRAs, since every step is a separate node instead of one bundled node.
-
-## Performance
+<details>
+<summary><b>Performance and how many steps?</b></summary>
 
 Every DiffHDR node logs one INFO line per execution with its own stage breakdown, so you can see
 where your time goes on your own hardware instead of guessing:
@@ -259,6 +258,8 @@ Same host and settings; warm. A cold first run after a ComfyUI restart adds a **
 The panorama is far cheaper than the video modes because it is a single latent frame: 2048×1024 is
 256×128 latent pixels against 9 latent frames × 80×45 for a 720p clip.
 
+Long clips also cost host RAM in proportion to their length — see *Limitations*.
+
 ### The same GPU can be twice as slow
 
 These jobs are GPU-bound only during `sample`. Everything else is CPU work, and two rented
@@ -316,7 +317,94 @@ numbers above.
   steps over 99 frames) and visibly tightens temporal consistency: the per-frame masked mean log
   value varies over 0.425–0.454 with it against 0.384–0.452 without.
 
-## Platform notes
+</details>
+
+<details>
+<summary><b>Benchmarks (RTX PRO 6000 Blackwell)</b></summary>
+
+<!-- BENCHMARKS: filled from .dev/gpu/bench/README_SECTION.md -->
+
+</details>
+
+<details>
+<summary><b>Full node reference</b></summary>
+
+### DiffHDR (Image / Video) — `DiffHDRVideo`
+
+All-in-one reconstruction for a single image or a frame sequence. One frame runs in image mode; up
+to `window_size` frames run as a single window; more frames run as overlapping, blended sliding
+windows.
+
+- **Inputs**: `model` (Wan2.1-VACE-14B), `vae` (Wan 2.1 VAE), `images` (LDR image or batch),
+  `clip` (optional umT5-xxl), `prompt` (only used with `clip` connected), `mask`
+  (optional, overrides automatic detection), `reference_image` (optional, guides content of
+  over-exposed regions), `reference_ev` (exposure boost applied to the reference, default 5 stops),
+  `resize_mode` (`crop_to_720p` / `native` / `custom`), `width`, `height` (for `custom`), `steps`
+  (default 50), `seed`, `mask_overexposed`, `mask_underexposed`, `window_size` (frames per window,
+  4n+1, default 33 — the training length), `window_stride` (frames between window starts, default
+  16), `use_prev_window_reference` (temporal consistency across windows for long videos),
+  `attention`, `vae_precision`.
+- **Outputs**: `hdr` (linear scene-referred HDR image/batch), `mask` (regenerated regions).
+
+### DiffHDR HDRI (Panorama) — `DiffHDRPano`
+
+Reconstructs an HDR environment map from a single clipped, equirectangular LDR panorama using the
+DiffHDR panorama LoRA.
+
+- **Inputs**: `model`, `vae`, `image` (equirectangular, 2:1; only the first frame of a batch is
+  used), `clip` (optional), `prompt` (defaults to the training prompt, only used with `clip`
+  connected), `mask` (optional), `width` (default 2048), `height` (default 1024 — the panorama is
+  stretched to this size, not cropped), `steps` (default 50), `seed`, `attention`, `vae_precision`.
+- **Outputs**: `hdr`, `mask`.
+
+### DiffHDR Apply LoRA — `DiffHDRApplyLora`
+
+For modular graphs: downloads (on first use) and patches the DiffHDR LoRA into a Wan2.1-VACE-14B
+model. Follow with `ModelSamplingSD3` (shift 5), and sample with `euler` / `simple`, `cfg` 1.
+
+- **Inputs**: `model`, `variant` (`standard`: image/video, `pano`: HDRI), `strength` (default 1.0).
+- **Outputs**: `model`.
+
+### DiffHDR Preprocess — `DiffHDRPreprocess`
+
+Builds the log-encoded control video and regeneration mask for a native `WanVaceToVideo` graph.
+
+- **Inputs**: `images` (sRGB LDR frames, sized to multiples of 16), `variant` (`video` / `pano`
+  mask detector), `mask_overexposed`, `mask_underexposed`.
+- **Outputs**: `control_video` (log-encoded frames, feed to `WanVaceToVideo.control_video`),
+  `control_masks` (feed to `WanVaceToVideo.control_masks`).
+
+### DiffHDR Postprocess — `DiffHDRPostprocess`
+
+Decodes the DiffHDR log curve to linear HDR after `VAE Decode` in a modular graph.
+
+- **Inputs**: `images` (VAE-decoded, log-encoded frames).
+- **Outputs**: `hdr` (linear HDR).
+
+### DiffHDR Tonemap Preview — `DiffHDRTonemap`
+
+Converts linear HDR to a displayable sRGB image, for `PreviewImage` or an LDR export.
+
+- **Inputs**: `hdr`, `exposure` (stops, default 0), `operator` (`reinhard` compresses highlights,
+  `clip` shows the LDR range at the chosen exposure as-is).
+- **Outputs**: `image` (sRGB, `[0,1]`).
+
+### DiffHDR Save EXR — `DiffHDRSaveEXR`
+
+Writes linear HDR as OpenEXR (single file or frame sequence) or Radiance `.hdr`.
+
+- **Inputs**: `images` (linear Rec.709 HDR image or batch), `filename_prefix` (default
+  `DiffHDR/hdr`), `format` (`exr` / `hdr`), `bit_depth` (`half` / `float`), `compression` (`none`,
+  `rle`, `zips`, `zip`, `piz`, `pxr24`, `b44`, `b44a`, `dwaa`, `dwab`), `dwa_compression_level`
+  (default 45, only used by `dwaa`/`dwab`), `colorspace` (`linear_rec709` / `acescg` /
+  `aces2065_1`), `start_frame` (first frame number of a sequence), `preview_exposure` (exposure for
+  the tonemapped UI preview only).
+- **Outputs**: none (output node; also emits a tonemapped preview in the UI).
+
+</details>
+
+<details>
+<summary><b>Platform notes</b></summary>
 
 - **CUDA**: `attention=auto` prefers flash-attn, then SageAttention, then ComfyUI's own default
   attention backend, depending on what is importable in your environment; unavailable/incompatible
@@ -331,9 +419,14 @@ numbers above.
 - **CPU**: supported for testing (this is how the automated test suite and CI run) but far too slow
   for real inference on a 14B video diffusion model.
 - **Windows**: the code path has no Windows-specific branches, but it has not been run on a Windows
-  GPU yet — see Limitations.
+  GPU yet — see *Limitations*.
+- **CPU thread pool**: if the `masks` or `control` stage dominates your `DiffHDR timing` line, cap
+  `OMP_NUM_THREADS` to the cores you actually have before starting ComfyUI — see *Performance*.
 
-## HDR/EXR notes
+</details>
+
+<details>
+<summary><b>HDR / EXR notes</b></summary>
 
 - The `hdr` output of every DiffHDR node is **linear, scene-referred** Rec.709 data with values
   that legitimately exceed `1.0` in reconstructed highlights. Never route it through an 8-bit save
@@ -351,7 +444,10 @@ numbers above.
   sequence. Frame numbers are padded to at least four digits, widened for the whole sequence
   when the last frame needs more, so the files always stay in lexical order.
 
-## Limitations
+</details>
+
+<details>
+<summary><b>Limitations</b></summary>
 
 - DiffHDR was trained at 720p (1280×720 or 720×1280) on 33-frame windows; `resize_mode=crop_to_720p`
   and the default `window_size=33` match that training distribution most closely. Other sizes and
@@ -367,11 +463,28 @@ numbers above.
 - The published numbers were measured on a single A100 80GB PCIe; other GPUs will differ.
 - The Windows GPU path is untested.
 
+</details>
+
+<details>
+<summary><b>Development</b></summary>
+
+- `python -m pytest -q` runs the suite. It needs `pytest` and `numpy` (`requirements-dev.txt`) on
+  top of the runtime requirements, and runs on the CPU.
+- Point `COMFYUI_PATH` at a ComfyUI checkout to also run the tests that import ComfyUI itself (node
+  registration, schemas, the workflow `widgets_values` check):
+  `COMFYUI_PATH=/path/to/ComfyUI python -m pytest -q`. Set `DIFFHDR_REQUIRE_COMFY=1` to make those
+  tests fail instead of skipping when ComfyUI cannot be imported.
+- A few tests compare directly against the upstream implementation and skip unless it is checked
+  out locally: `git clone https://github.com/Eyeline-Labs/DiffHDR .dev/reference/DiffHDR`.
+- CI runs the suite on Linux, macOS and Windows with Python 3.10 and 3.12, plus a dedicated job that
+  checks out ComfyUI and runs the ComfyUI-dependent tests with `DIFFHDR_REQUIRE_COMFY=1`.
+
+</details>
+
 ## Credits & License
 
-This project is licensed under **Apache-2.0** (see `LICENSE`).
-
-It is an independent ComfyUI integration of:
+This project is licensed under **Apache-2.0** (see `LICENSE`). It is an independent ComfyUI
+integration of:
 
 - **[DiffHDR](https://github.com/Eyeline-Labs/DiffHDR)** by Eyeline Labs (Apache-2.0) — mask
   detection, the log encoding curve and the long-video blending scheme are ported from this
