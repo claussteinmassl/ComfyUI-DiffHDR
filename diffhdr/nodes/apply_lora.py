@@ -15,7 +15,7 @@ class DiffHDRApplyLora(io.ComfyNode):
             node_id="DiffHDRApplyLora",
             display_name="DiffHDR Apply LoRA",
             category=common.CATEGORY,
-            description="For modular graphs: patches the DiffHDR LoRA into a Wan2.1-VACE-14B model. Use with ModelSamplingSD3 shift 5, euler/simple, cfg 1.",
+            description="For modular graphs: patches the DiffHDR LoRA into a Wan2.1-VACE-14B model. Use with ModelSamplingSD3 shift 8 and res_multistep/simple, cfg 1 (shift 5 and euler/simple for the reference implementation's setting).",
             inputs=[
                 io.Model.Input("model", tooltip="Wan2.1-VACE-14B diffusion model."),
                 io.Combo.Input("variant", options=list(lora.LORA_FILES), default="standard", tooltip="standard: images and videos. pano: equirectangular HDRIs."),

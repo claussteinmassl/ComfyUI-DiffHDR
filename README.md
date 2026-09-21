@@ -80,8 +80,17 @@ prompts DiffHDR was trained with, so the `clip` input is left unconnected and th
 is ignored. Add a `CLIPLoader` (umT5-xxl, type `wan`) and wire it to `clip` only if you want to
 encode a prompt of your own. The inputs that matter:
 
-- **`steps`** — 50 reproduces the published setting, 20 is usually the best trade-off, 10 is for
-  iterating. See *Performance and how many steps?* below.
+- **`preset`** (first widget) — `fast` (the default) samples with `res_multistep` / `simple` /
+  shift 8, which was measured to reach the 50-step reference in a fraction of the steps;
+  `original` switches to the reference implementation's `euler` / `simple` / shift 5; `custom`
+  hands control to the `sampler` / `scheduler` / `shift` widgets further down. These are **tuned
+  defaults, not the paper's** — select `original` to reproduce the reference implementation.
+- **`steps`** — 20 is the default and is indistinguishable from the 50-step reference with the
+  `fast` preset; 10 is plenty for finals, 6 for previews. 50 reproduces the published setting.
+  See *Performance and how many steps?* below.
+- **`sampler` / `scheduler` / `shift`** — only honoured when `preset` is `custom`. The lists are
+  curated: the `beta` scheduler and the `deis` sampler measured worse than doing nothing and are
+  not offered.
 - **`resize_mode`** — `crop_to_720p` centre-crops and resizes to the 1280×720 training resolution
   (720×1280 for portrait); `native` keeps your size floored to multiples of 16; `custom` uses the
   `width`/`height` widgets.
@@ -103,11 +112,13 @@ encode a prompt of your own. The inputs that matter:
 ![The diffhdr_modular.json example workflow in the ComfyUI graph editor](assets/readme/workflow-modular.jpg)
 
 `workflows/diffhdr_modular.json` rebuilds the same pipeline out of individual nodes on a native
-VACE graph: `DiffHDR Apply LoRA` → `ModelSamplingSD3` (shift 5), `DiffHDR Preprocess` →
-`WanVaceToVideo` (conditioned by `CLIPTextEncode`) → `KSampler` (`euler` / `simple`, `cfg` 1) →
-`TrimVideoLatent` → `VAEDecode` → `DiffHDR Postprocess` → save / tonemap / preview. Use it when you
-need to combine DiffHDR with other VACE controls or additional LoRAs, since every step is a
-separate node you can reach into.
+VACE graph: `DiffHDR Apply LoRA` → `ModelSamplingSD3` (shift 8), `DiffHDR Preprocess` →
+`WanVaceToVideo` (conditioned by `CLIPTextEncode`) → `KSampler` (`res_multistep` / `simple`,
+`cfg` 1) → `TrimVideoLatent` → `VAEDecode` → `DiffHDR Postprocess` → save / tonemap / preview. The
+example sets the same values as the all-in-one node's `fast` preset; for the reference
+implementation's setting use shift 5 and `euler` / `simple`. Use this graph when you need to
+combine DiffHDR with other VACE controls or additional LoRAs, since every step is a separate node
+you can reach into.
 
 ### Nodes
 
@@ -315,19 +326,84 @@ numbers above.
 
 ### How many steps?
 
-- **50 steps** reproduces the published setting and is what all parity numbers above were measured at.
-- **20 steps** is usually the best speed/quality trade-off — 40 % faster — but how much highlight
-  energy it gives up depends on the shot. On the 33-frame test clip the reconstructed highlights
-  stay within ~4 % of the 50-step result (masked p99.9 luminance 3.98 vs 3.82) at 47 dB masked
-  PSNR; on the much brighter 99-frame long-video sequence 20 steps reconstructs **~20 % less**
-  (masked p99.9 19.4 vs the reference's 24.2, against 25.4 at 50 steps), while staying at 58.8 dB
-  outside the mask. Check the highlights on your own footage before committing to 20.
-- **10 steps** is fine for previews and for finding a seed, but it does *not* reconstruct the same
-  amount of highlight energy: on the test image the masked p99.9 luminance drops from 8.87 to 5.61
-  (−37 %) and the peak from 15.0 to 6.4. Use it to iterate, then re-run the keeper at 20 or 50.
+The step count is the one real speed lever, and how far you can turn it down depends on the
+preset. All parity numbers above were measured at 50 steps with the `original` preset.
+
+- **`fast` preset (default), 10–20 steps** — the keeper setting. At 10 steps the reconstruction
+  lands inside the 50-step reference's *own* seed-to-seed spread on both test clips, at 4.5x the
+  speed; 20 steps is the shipped default because it costs little and leaves no doubt.
+- **`fast` preset, 6 steps** — previews and seed hunting, 7x faster than the reference setting.
+  Highlight statistics are still within ~1 % of the 50-step run on the clips measured, but fine
+  highlight texture (leaded-glass tracery and the like) starts to soften. At 4 steps both
+  measured samplers lose that texture outright.
+- **`original` preset** — reproduces the reference implementation. It needs 20 steps to get where
+  `fast` is at 10, and at 6–10 steps it carries a systematic +2.1 to +2.9 % highlight lift.
+  50 steps is the published setting.
+- **Check your own footage.** How much a lower step count changes the highlights is
+  content-dependent. On the bright 99-frame long-video sequence 20 `original` steps reconstruct
+  **~20 % less** highlight energy than 50 (masked p99.9 19.4 vs 24.2, against 25.4 at 50 steps)
+  while staying at 58.8 dB outside the mask.
 - `use_prev_window_reference` on long videos costs about 13 % more time (1754 s vs 1559 s at 20
   steps over 99 frames) and visibly tightens temporal consistency: the per-frame masked mean log
   value varies over 0.425–0.454 with it against 0.384–0.452 without.
+
+</details>
+
+<details>
+<summary><b>Samplers, turbo LoRAs and SageAttention 3 (measured)</b></summary>
+
+Everything below was measured on a rented **RTX PRO 6000 Blackwell** (ComfyUI v0.36.0, fp16 VACE,
+fp32 VAE, SageAttention 2.2.0, cfg 1, 33 frames at 1280×720 unless stated): 197 runs on turbo
+LoRAs and SageAttention 3, then 116 runs on samplers with seed statistics.
+
+**Step-distillation ("turbo") LoRAs do not work here, and SageAttention 3 is not worth it.**
+Thirteen Wan 2.1 turbo LoRAs (lightx2v, CausVid, AccVid, FusionX, FastWan, rCM, …) load cleanly
+next to DiffHDR — it patches the 8 `vace_blocks`, they patch the main `blocks` — but they shift
+the *value* of DiffHDR's log-encoded output, and the log curve turns that into exponentially
+blown highlights: at 6 steps and strength 1.0, masked log-PSNR against the 50-step run falls from
+**37.1 dB with no LoRA to 28.4 dB** (CausVid v2 r32, +75 % highlight level) down to **15.7 dB**
+(lightx2v v1 r64, +3,894 %), and turning the strength down only walks the curve back towards
+"off" — CausVid v2 @ 0.1 at 12 steps reaches 39.9 dB in 106 s while **no LoRA at 10 steps reaches
+40.1 dB in 90 s**. They also cannot speed anything up: the time per step was 7.93–8.02 s in all
+197 runs, with or without a LoRA. SageAttention 3 (FP4) builds and runs on Blackwell but is
+1.06x faster than SageAttention 2.2 at the kernel level and **0.7 % end to end** (89.7 s vs
+90.3 s at 10 steps), with 5x the numerical error — against SDPA at the same seed it reaches only
+36.8 dB inside the mask where SageAttention 2.2 reaches 62.4 dB, so it is not offered.
+
+**Read every quality number against the seed spread.** There is no ground-truth HDR here, and the
+50-step output is one sample of a stochastic process: two 50-step runs of the same input that
+differ *only* in the noise seed are **31.6–32.0 dB** apart inside the mask on the video clips,
+27.2 dB on a single image and **25.3 dB on a panorama**, and on one clip one seed in three invents
+a small sun core that lifts the p99.9 highlight level by 449 %. The stable statistic is therefore
+the mean log value of the reconstructed region (seed spread ±0.5 to ±2.2 %), not the extreme
+quantiles — a configuration that reaches ~32 dB against a same-seed 50-step run is as close to
+the reference as a second reference run would be.
+
+**Sampler and step count** (33 frames at 1280×720, node's own time, mean over 3 seeds, masked
+log-PSNR against the *same-seed* 50-step run):
+
+| preset | steps | node time | vs 50 steps | quality |
+|---|---|---|---|---|
+| `fast` | 6 | 58 s | 7.0x | 44.4 dB (clip B) / 39.3 dB (clip A); mean log within +0.2 % / +1.0 % — fine tracery softens slightly |
+| `fast` | 10 | 90 s | 4.5x | 48.2 dB / 43.5 dB; first setting inside the reference's own seed range on both clips |
+| `fast` | 20 | 169 s | 2.4x | the shipped default; not measured separately — 10 steps already lands inside the reference's seed spread, 20 leaves no doubt |
+| `original` | 10 | 90 s | 4.5x | 40.5 dB / 40.0 dB, with a systematic +2.1 % highlight lift on both clips |
+| `original` | 20 | 169 s | 2.4x | 47.1 dB, +0.9 % (clip B); 46.2 dB on clip A |
+| `original` | 50 | 408 s | 1.0x | the published setting — and itself one draw from the ~32 dB-wide seed distribution above |
+
+`res_multistep` and `dpmpp_2m` are interchangeable (never more than 0.12 dB apart) and both are
+free: the sampler costs nothing per step, only the step count does (8.0 s/step plus ~10 s fixed at
+this resolution). Raising the shift from 5 to 8 helps every sampler, `euler` included. Two
+settings are deliberately missing from the widgets: the **`beta` scheduler** (−54 % highlight
+energy, mushy reconstruction) and the **`deis` sampler** (+144 %, below the seed noise floor,
+invents glow patches).
+
+> **Pending:** these sampler numbers come from single-window inputs (33-frame clips, images,
+> panoramas). The sliding-window path used for longer videos could not be measured with a
+> different sampler before the widgets existed; it is being re-measured through the node now
+> (2026-09) and the result will be added here. What is already known for long videos: dropping
+> `original` from 50 to 6 steps is safe (39.4 dB against the 50-step windowed run, window seams
+> unchanged at 3.5x the median frame-to-frame step against the reference's own 3.2x).
 
 </details>
 
@@ -489,12 +565,15 @@ All-in-one reconstruction for a single image or a frame sequence. One frame runs
 to `window_size` frames run as a single window; more frames run as overlapping, blended sliding
 windows.
 
-- **Inputs**: `model` (Wan2.1-VACE-14B), `vae` (Wan 2.1 VAE), `images` (LDR image or batch),
+- **Inputs**: `preset` (`fast` / `original` / `custom`, default `fast`), `model` (Wan2.1-VACE-14B),
+  `vae` (Wan 2.1 VAE), `images` (LDR image or batch),
   `clip` (optional umT5-xxl), `prompt` (only used with `clip` connected), `mask`
   (optional, overrides automatic detection), `reference_image` (optional, guides content of
   over-exposed regions), `reference_ev` (exposure boost applied to the reference, default 5 stops),
   `resize_mode` (`crop_to_720p` / `native` / `custom`), `width`, `height` (for `custom`), `steps`
-  (default 50), `seed`, `mask_overexposed`, `mask_underexposed`, `window_size` (frames per window,
+  (default 20), `seed`, `sampler` (default `res_multistep`), `scheduler` (default `simple`),
+  `shift` (default 8.0 — the last three only honoured when `preset` is `custom`),
+  `mask_overexposed`, `mask_underexposed`, `window_size` (frames per window,
   4n+1, default 33 — the training length), `window_stride` (frames between window starts, default
   16), `use_prev_window_reference` (temporal consistency across windows for long videos),
   `attention`, `vae_precision`.
@@ -505,16 +584,20 @@ windows.
 Reconstructs an HDR environment map from a single clipped, equirectangular LDR panorama using the
 DiffHDR panorama LoRA.
 
-- **Inputs**: `model`, `vae`, `image` (equirectangular, 2:1; only the first frame of a batch is
+- **Inputs**: `preset` (`fast` / `original` / `custom`, default `fast`), `model`, `vae`, `image`
+  (equirectangular, 2:1; only the first frame of a batch is
   used), `clip` (optional), `prompt` (defaults to the training prompt, only used with `clip`
   connected), `mask` (optional), `width` (default 2048), `height` (default 1024 — the panorama is
-  stretched to this size, not cropped), `steps` (default 50), `seed`, `attention`, `vae_precision`.
+  stretched to this size, not cropped), `steps` (default 20), `seed`, `sampler`, `scheduler`,
+  `shift` (only honoured when `preset` is `custom`), `attention`, `vae_precision`.
 - **Outputs**: `hdr`, `mask`.
 
 ### DiffHDR Apply LoRA — `DiffHDRApplyLora`
 
 For modular graphs: downloads (on first use) and patches the DiffHDR LoRA into a Wan2.1-VACE-14B
-model. Follow with `ModelSamplingSD3` (shift 5), and sample with `euler` / `simple`, `cfg` 1.
+model. Follow with `ModelSamplingSD3` and sample with `cfg` 1 — shift 8 with `res_multistep` /
+`simple` to match the all-in-one node's `fast` preset, shift 5 with `euler` / `simple` for the
+reference implementation's setting.
 
 - **Inputs**: `model`, `variant` (`standard`: image/video, `pano`: HDRI), `strength` (default 1.0).
 - **Outputs**: `model`.
