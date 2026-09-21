@@ -161,6 +161,14 @@ floor between two runs of the reference itself.*
 reconstructed highlight. Ten steps is fine for iterating, but it reconstructs a flatter highlight:
 masked p99.9 luminance 5.61 against 8.87, peak 6.4 against 15.0.*
 
+![Three renders of the 99-frame long video at −4 EV: no window reference, previous-window reference at 20 steps, previous-window reference at 50 steps](assets/readme/long-video-consistency.webp)
+
+*Long video, 99 frames in six sliding windows, shown at −4 EV. Left: every window sampled on its
+own — the view behind the glass changes with every window and the blend cross-fades between the
+versions. Middle: the same run with `use_prev_window_reference` (the default), `fast` preset,
+20 steps — the foliage stays the same along the clip. Right: `original` preset, 50 steps, same
+reference. [Full-quality MP4](assets/readme/long-video-consistency.mp4).*
+
 ![An HDRI panorama output at 0 EV and −4 EV](assets/readme/results-panorama.jpg)
 
 *HDRI mode: a clipped equirectangular LDR panorama reconstructed into a 2048×1024 environment map.
@@ -451,7 +459,8 @@ as a video, the 99-frame sequence without a window reference shows the sunlit fo
 glass fade into a different reconstruction with every window — each window is sampled on its own
 and only the decoded frames are blended. `use_prev_window_reference` hands every window the
 previous window's output frame at the next window's start as its VACE reference image; it is now
-on by default. Same clip, `fast` / 20 steps / seed 34, per-window outputs captured before the blend:
+on by default (the animation under *Results* shows the three runs side by side). Same clip, `fast` /
+20 steps / seed 34, per-window outputs captured before the blend:
 
 | | without reference | with `use_prev_window_reference` |
 |---|---|---|
