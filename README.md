@@ -6,9 +6,10 @@ Wan2.1-VACE-14B objects — no VACE fork, no bundled inference engine.
 
 ![The clipped LDR input, the same input four stops down, and the DiffHDR reconstruction four stops down](assets/readme/hero.jpg)
 
-*One frame of the demo dance sequence. Left: the clipped LDR input. Middle: the same input pulled
-down four stops — the window is a flat white shape, there is nothing to recover. Right: the DiffHDR
-reconstruction at the same −4 EV, with the sky and the trees outside the window back.*
+*The first frame of the demo dance sequence. Left: the clipped LDR input. Middle: the same input
+pulled down four stops — the window is a flat white shape, there is nothing to recover. Right: the
+DiffHDR reconstruction at the same −4 EV (the node's defaults: `fast` preset, 20 steps), with the sky
+and the trees outside the window back.*
 
 ## What it is
 
