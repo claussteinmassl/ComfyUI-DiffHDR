@@ -167,7 +167,7 @@ masked p99.9 luminance 5.61 against 8.87, peak 6.4 against 15.0.*
 own — the view behind the glass changes with every window and the blend cross-fades between the
 versions. Middle: the same run with `use_prev_window_reference` (the default), `fast` preset,
 20 steps — the foliage stays the same along the clip. Right: `original` preset, 50 steps, same
-reference. [Full-quality MP4](assets/readme/long-video-consistency.mp4).*
+reference. [Full-quality MP4, 3840×720](assets/readme/long-video-consistency.mp4).*
 
 ![An HDRI panorama output at 0 EV and −4 EV](assets/readme/results-panorama.jpg)
 
