@@ -4,10 +4,13 @@ from pathlib import Path
 
 import pytest
 
-WORKFLOWS = sorted((Path(__file__).parent.parent / "workflows").glob("*.json"))
+ROOT = Path(__file__).parent.parent
+WORKFLOWS = sorted((ROOT / "workflows").glob("*.json"))
+EXPERIMENTAL = sorted((ROOT / "workflows" / "experimental").glob("*.json"))
+ALL_WORKFLOWS = WORKFLOWS + EXPERIMENTAL
 
 
-@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", ALL_WORKFLOWS, ids=lambda p: p.name)
 def test_links_consistent(path):
     wf = json.loads(path.read_text())
     ids = {n["id"] for n in wf["nodes"]}
@@ -19,6 +22,27 @@ def test_links_consistent(path):
 
 def test_four_workflows():
     assert len(WORKFLOWS) == 4
+
+
+def test_two_experimental_workflows():
+    assert [p.name for p in EXPERIMENTAL] == ["diffhdr_video_turbo_accvid.json",
+                                              "diffhdr_video_turbo_fastwan.json"]
+
+
+@pytest.mark.parametrize("path", EXPERIMENTAL, ids=lambda p: p.name)
+def test_experimental_has_turbo_lora_and_video_export(path):
+    """The experimental graphs must carry a turbo LoRA and both MP4 export branches."""
+    wf = json.loads(path.read_text())
+    types = [n["type"] for n in wf["nodes"]]
+    assert types.count("LoraLoaderModelOnly") == 1
+    assert types.count("CreateVideo") == 2 and types.count("SaveVideo") == 2
+    assert "Note" in types
+    video = next(n for n in wf["nodes"] if n["type"] == "DiffHDRVideo")
+    named = video["widgets_values_named"]
+    assert named["preset"] == "original" and named["steps"] == 6
+    tonemaps = [n["widgets_values_named"] for n in wf["nodes"] if n["type"] == "DiffHDRTonemap"]
+    assert {"exposure": 0, "operator": "reinhard"} in tonemaps
+    assert {"exposure": -4, "operator": "clip"} in tonemaps
 
 
 def _diffhdr_node_classes():
@@ -75,7 +99,7 @@ def check_node_widgets_values(node: dict, node_cls, io) -> None:
 
 
 @pytest.mark.requires_comfy
-@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", ALL_WORKFLOWS, ids=lambda p: p.name)
 def test_diffhdr_widgets_values_match_schema(path):
     from comfy_api.latest import io
     classes = _diffhdr_node_classes()
