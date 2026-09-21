@@ -16,8 +16,18 @@ All notable changes to this project are documented here. Versions follow
 - **Preset-sync frontend extension** (`web/diffhdr_presets.js`): picking a preset fills the three
   widgets, editing one of them switches the preset to `custom`. Python resolves the preset again
   on execution, so the nodes behave identically without the extension.
-- README section *Samplers, turbo LoRAs and SageAttention 3 (measured)* with the results of 313
+- README section *Samplers, turbo LoRAs and SageAttention 3 (measured)* with the results of 323
   GPU runs on an RTX PRO 6000 Blackwell, and images throughout the README.
+- **The sliding-window long-video path is measured too**: all 99 demo frames through the
+  all-in-one node in six blended windows. `fast` at 20 steps reaches 46.5 dB against the 50-step
+  `original` reference and beats `original` at 6 steps (38.6 vs 35.7 dB); no preset or step count
+  changes the window seams. Two 50-step runs that differ only in the noise seed are 25.1 dB
+  apart, so every measured setting is inside the reference's own distribution — the `fast`
+  default stands for long videos as well.
+- `workflows/experimental/`: two graphs that put a Wan 2.1 turbo LoRA (FastWan rank 64, AccVid
+  rank 32) in front of the all-in-one node at `original` / 6 steps and export MP4s at 0 EV and
+  −4 EV. They are a creative look, not an HDR reconstruction — measured at 21.8 dB / +212 %
+  highlight energy and 26.8 dB / +27 % against the 50-step reference — and are labelled as such.
 
 ### Changed
 

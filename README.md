@@ -339,10 +339,16 @@ preset. All parity numbers above were measured at 50 steps with the `original` p
 - **`original` preset** — reproduces the reference implementation. It needs 20 steps to get where
   `fast` is at 10, and at 6–10 steps it carries a systematic +2.1 to +2.9 % highlight lift.
   50 steps is the published setting.
+- **Long videos behave the same.** The sliding-window path was measured separately on all 99
+  demo frames (six blended windows): `fast` at 20 steps reaches 46.5 dB against the 50-step
+  `original` run and `fast` at 10 steps 43.1 dB, where two 50-step runs that differ only in the
+  seed are 25.1 dB apart. No preset or step count changes the window seams. The table is in
+  *Samplers, turbo LoRAs and SageAttention 3 (measured)* below.
 - **Check your own footage.** How much a lower step count changes the highlights is
-  content-dependent. On the bright 99-frame long-video sequence 20 `original` steps reconstruct
-  **~20 % less** highlight energy than 50 (masked p99.9 19.4 vs 24.2, against 25.4 at 50 steps)
-  while staying at 58.8 dB outside the mask.
+  content-dependent, and the two presets miss in opposite directions. On the bright 99-frame
+  long-video sequence 20 `original` steps reconstruct **~22 % less** highlight energy than 50
+  (masked p99.9 19.3 vs 24.6) while `fast` at 20 steps reconstructs ~66 % *more*; both stay
+  within the spread of two 50-step runs of the same clip.
 - `use_prev_window_reference` on long videos costs about 13 % more time (1754 s vs 1559 s at 20
   steps over 99 frames) and visibly tightens temporal consistency: the per-frame masked mean log
   value varies over 0.425–0.454 with it against 0.384–0.452 without.
@@ -354,7 +360,8 @@ preset. All parity numbers above were measured at 50 steps with the `original` p
 
 Everything below was measured on a rented **RTX PRO 6000 Blackwell** (ComfyUI v0.36.0, fp16 VACE,
 fp32 VAE, SageAttention 2.2.0, cfg 1, 33 frames at 1280×720 unless stated): 197 runs on turbo
-LoRAs and SageAttention 3, then 116 runs on samplers with seed statistics.
+LoRAs and SageAttention 3, 116 runs on samplers with seed statistics, and 10 runs of the full
+99-frame sequence on the sliding-window long-video path.
 
 **Step-distillation ("turbo") LoRAs do not work here, and SageAttention 3 is not worth it.**
 Thirteen Wan 2.1 turbo LoRAs (lightx2v, CausVid, AccVid, FusionX, FastWan, rCM, …) load cleanly
@@ -398,12 +405,47 @@ settings are deliberately missing from the widgets: the **`beta` scheduler** (�
 energy, mushy reconstruction) and the **`deis` sampler** (+144 %, below the seed noise floor,
 invents glow patches).
 
-> **Pending:** these sampler numbers come from single-window inputs (33-frame clips, images,
-> panoramas). The sliding-window path used for longer videos could not be measured with a
-> different sampler before the widgets existed; it is being re-measured through the node now
-> (2026-09) and the result will be added here. What is already known for long videos: dropping
-> `original` from 50 to 6 steps is safe (39.4 dB against the 50-step windowed run, window seams
-> unchanged at 3.5x the median frame-to-frame step against the reference's own 3.2x).
+**The sliding-window long-video path, measured** (2026-09-21). Everything above comes from
+single-window inputs; long clips take a different path through the node, so the presets were
+re-measured on it: all 99 frames of the demo sequence at 1280×720, six blended windows
+(`window_size` 33, `window_stride` 16), `use_prev_window_reference` off, seed 34, through the
+`DiffHDR (Image / Video)` node itself. The reference is the same node at `original` / 50 steps.
+
+| preset | steps | node time | masked PSNR vs the 50-step reference | mean log vs reference | seam ratio |
+|---|---|---|---|---|---|
+| `fast` | 6 | 346 s | 38.6 dB | +1.1 % | 2.8x |
+| `fast` | 10 | 540 s | 43.1 dB | +0.5 % | 2.9x |
+| `fast` | 20 | 1027 s | 46.5 dB | −0.1 % | 2.8x |
+| `original` | 6 | 346 s | 35.7 dB | +2.0 % | 3.0x |
+| `original` | 20 | 1025 s | 47.0 dB | +0.5 % | 2.6x |
+| `original` | 50 | 2564 s | the reference | — | 2.9x |
+
+**Read all of it against the noise floor: two 50-step `original` runs that differ only in the
+noise seed are 25.1 dB apart** on this clip, with 75 % less highlight energy at p99.9 and a
+8.8 % lower mean log value — the windowed 99-frame path has a far wider seed distribution than
+the 33-frame clips (31.6–32.0 dB). Every preset and step count above therefore sits well inside
+the reference's own distribution, and the deviations in the table are small fractions of the
+distance between two reference runs.
+
+`fast` is the better choice on this path too: at 6 steps it is 3 dB closer to the reference than
+`original` and carries half its mean-log bias, and at 20 steps the two are level (46.5 vs
+47.0 dB, and `fast` is the closer of the two in mean log). The two presets miss in opposite
+directions — `fast` reconstructs *more* highlight energy than the 50-step run (p99.9 +52 to
++67 %), `original` at low step counts reconstructs *less* (−22 % at 20 steps, −41 % at 6), which
+is the same under-reconstruction the "How many steps?" section reports. **No configuration
+introduces a seam or flicker**: the largest masked mean-log jump at a window boundary stays at
+2.6–3.0x the median jump elsewhere for every run, against 2.9x for the reference itself and 5.6x
+for the second reference seed, and the flicker score is flat at 0.0037–0.0039 everywhere.
+Node time depends only on the step count (48.0–48.4 s per step for all six windows); the sampler
+itself is free. The 6-step figure is the warm one — the first run after a ComfyUI restart carries
+about 180 s of one-off model loading inside its first sampling call.
+
+For a *creative*, deliberately unfaithful look, `workflows/experimental/` holds two graphs that
+put a Wan 2.1 turbo LoRA in front of the node. On the same 99 frames, FastWan rank 64 at strength
+1.0 and 6 steps reaches 21.8 dB with **+212 %** highlight energy and AccVid rank 32 reaches
+26.8 dB with +27 % — both far outside the seed distribution, and the FastWan render invents a
+whole scene outside the window that no reference run contains. That is a look, not a
+reconstruction; the graphs are labelled accordingly.
 
 </details>
 
