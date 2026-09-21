@@ -176,7 +176,7 @@
       ],
       "size": [
         400,
-        524
+        620
       ],
       "flags": {},
       "order": 3,
@@ -219,6 +219,15 @@
           "name": "reference_image",
           "shape": 7,
           "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "preset",
+          "name": "preset",
+          "type": "COMBO",
+          "widget": {
+            "name": "preset"
+          },
           "link": null
         },
         {
@@ -281,6 +290,33 @@
           "type": "INT",
           "widget": {
             "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sampler",
+          "name": "sampler",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "scheduler",
+          "name": "scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "shift",
+          "name": "shift",
+          "type": "FLOAT",
+          "widget": {
+            "name": "shift"
           },
           "link": null
         },
@@ -369,14 +405,18 @@
         "Node name for S&R": "DiffHDRVideo"
       },
       "widgets_values": [
+        "fast",
         "",
         5,
         "crop_to_720p",
         1280,
         720,
-        50,
+        20,
         10,
         "randomize",
+        "res_multistep",
+        "simple",
+        8,
         true,
         false,
         33,
@@ -386,14 +426,18 @@
         "fp32"
       ],
       "widgets_values_named": {
+        "preset": "fast",
         "prompt": "",
         "reference_ev": 5,
         "resize_mode": "crop_to_720p",
         "width": 1280,
         "height": 720,
-        "steps": 50,
+        "steps": 20,
         "seed": 10,
         "control_after_generate": "randomize",
+        "sampler": "res_multistep",
+        "scheduler": "simple",
+        "shift": 8,
         "mask_overexposed": true,
         "mask_underexposed": false,
         "window_size": 33,

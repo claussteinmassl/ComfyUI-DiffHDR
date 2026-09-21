@@ -176,7 +176,7 @@
       ],
       "size": [
         400,
-        336
+        432
       ],
       "flags": {},
       "order": 3,
@@ -212,6 +212,15 @@
           "name": "mask",
           "shape": 7,
           "type": "MASK",
+          "link": null
+        },
+        {
+          "localized_name": "preset",
+          "name": "preset",
+          "type": "COMBO",
+          "widget": {
+            "name": "preset"
+          },
           "link": null
         },
         {
@@ -260,6 +269,33 @@
           "link": null
         },
         {
+          "localized_name": "sampler",
+          "name": "sampler",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "scheduler",
+          "name": "scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "shift",
+          "name": "shift",
+          "type": "FLOAT",
+          "widget": {
+            "name": "shift"
+          },
+          "link": null
+        },
+        {
           "localized_name": "attention",
           "name": "attention",
           "type": "COMBO",
@@ -299,22 +335,30 @@
         "Node name for S&R": "DiffHDRPano"
       },
       "widgets_values": [
+        "fast",
         "Restore the full dynamic range of this clipped HDRI panorama.",
         2048,
         1024,
-        50,
+        20,
         42,
         "randomize",
+        "res_multistep",
+        "simple",
+        8,
         "auto",
         "fp32"
       ],
       "widgets_values_named": {
+        "preset": "fast",
         "prompt": "Restore the full dynamic range of this clipped HDRI panorama.",
         "width": 2048,
         "height": 1024,
-        "steps": 50,
+        "steps": 20,
         "seed": 42,
         "control_after_generate": "randomize",
+        "sampler": "res_multistep",
+        "scheduler": "simple",
+        "shift": 8,
         "attention": "auto",
         "vae_precision": "fp32"
       }

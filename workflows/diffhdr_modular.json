@@ -167,10 +167,10 @@
         "Node name for S&R": "ModelSamplingSD3"
       },
       "widgets_values": [
-        5
+        8
       ],
       "widgets_values_named": {
-        "shift": 5
+        "shift": 8
       }
     },
     {
@@ -851,18 +851,18 @@
       "widgets_values": [
         10,
         "randomize",
-        50,
+        20,
         1,
-        "euler",
+        "res_multistep",
         "simple",
         1
       ],
       "widgets_values_named": {
         "seed": 10,
         "control_after_generate": "randomize",
-        "steps": 50,
+        "steps": 20,
         "cfg": 1,
-        "sampler_name": "euler",
+        "sampler_name": "res_multistep",
         "scheduler": "simple",
         "denoise": 1
       }
