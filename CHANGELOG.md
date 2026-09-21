@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## 0.3.0 — 2026-09-21
+
+### Changed
+
+- **`use_prev_window_reference` is on by default.** Every sliding window of a long video is
+  sampled on its own; without a reference each window invents its own version of the clipped
+  content and the blend visibly cross-fades between them. Feeding each window the previous
+  window's output frame was measured to raise the agreement of neighbouring windows from 28.7 to
+  34.4 dB and to cut the drift along the clip from −15.8 % to −4.6 %, at 2 % more time. The
+  tooltip explains it. Two alternatives (a fixed first-window reference, and joint denoising with
+  ComfyUI's context windows) were measured and rejected — see the README.
+- New README hero image from the first frame of the demo dance sequence.
+
 ## 0.2.0 — 2026-09-21
 
 ### Added

@@ -181,3 +181,10 @@ def test_pano_node_resolves_the_preset(monkeypatch):
 
     assert seen["settings"] == sampling.SamplingSettings("euler", "normal", 3.0)
     assert seen["shift"] == 3.0
+
+
+def test_prev_window_reference_is_on_by_default_and_explained():
+    inputs = _inputs(_schemas()["DiffHDRVideo"])
+    widget = inputs["use_prev_window_reference"]
+    assert widget.default is True
+    assert "previous window" in widget.tooltip and "own" in widget.tooltip

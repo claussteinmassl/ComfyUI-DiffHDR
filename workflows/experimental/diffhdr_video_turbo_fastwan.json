@@ -477,7 +477,7 @@
         false,
         33,
         16,
-        false,
+        true,
         "auto",
         "fp32"
       ],
@@ -498,7 +498,7 @@
         "mask_underexposed": false,
         "window_size": 33,
         "window_stride": 16,
-        "use_prev_window_reference": false,
+        "use_prev_window_reference": true,
         "attention": "auto",
         "vae_precision": "fp32"
       }

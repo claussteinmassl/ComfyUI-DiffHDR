@@ -101,9 +101,11 @@ encode a prompt of your own. The inputs that matter:
   `reference_image` (boosted by `reference_ev`, default 5 stops) guides the content of clipped
   regions.
 - **Long video** — clips longer than `window_size` (4n+1, default 33 = the training length) are
-  processed as sliding windows starting every `window_stride` frames (default 16) and blended;
-  `use_prev_window_reference` feeds each window the previous one's output for tighter temporal
-  consistency.
+  processed as sliding windows starting every `window_stride` frames (default 16) and blended.
+  Every window is sampled on its own, so left alone each one invents its own version of the clipped
+  content and the blend cross-fades between them; `use_prev_window_reference` (on by default) feeds
+  each window the previous one's output frame as its reference image, which keeps the reconstructed
+  background the same along the clip — see the measured numbers under *Details*.
 - **`attention`** — `auto` picks SageAttention, then flash-attn, else ComfyUI's default, with an
   automatic PyTorch SDPA fallback. SageAttention is quantised attention; pick `sdpa` or
   `flash_attn` explicitly if you need bit-reproducible results.
@@ -351,9 +353,9 @@ preset. All parity numbers above were measured at 50 steps with the `original` p
   long-video sequence 20 `original` steps reconstruct **~22 % less** highlight energy than 50
   (masked p99.9 19.3 vs 24.6) while `fast` at 20 steps reconstructs ~66 % *more*; both stay
   within the spread of two 50-step runs of the same clip.
-- `use_prev_window_reference` on long videos costs about 13 % more time (1754 s vs 1559 s at 20
-  steps over 99 frames) and visibly tightens temporal consistency: the per-frame masked mean log
-  value varies over 0.425–0.454 with it against 0.384–0.452 without.
+- `use_prev_window_reference` (on by default since 0.3.0) costs about 2 % more time at 20 steps
+  over 99 frames (1137 s vs 1114 s) and is what keeps the reconstructed background the same from
+  window to window — the numbers are in *Samplers, turbo LoRAs and SageAttention 3 (measured)*.
 
 </details>
 
@@ -410,8 +412,9 @@ invents glow patches).
 **The sliding-window long-video path, measured** (2026-09-21). Everything above comes from
 single-window inputs; long clips take a different path through the node, so the presets were
 re-measured on it: all 99 frames of the demo sequence at 1280×720, six blended windows
-(`window_size` 33, `window_stride` 16), `use_prev_window_reference` off, seed 34, through the
-`DiffHDR (Image / Video)` node itself. The reference is the same node at `original` / 50 steps.
+(`window_size` 33, `window_stride` 16), `use_prev_window_reference` off (it was not the default
+yet), seed 34, through the `DiffHDR (Image / Video)` node itself. The reference is the same node at
+`original` / 50 steps.
 
 | preset | steps | node time | masked PSNR vs the 50-step reference | mean log vs reference | seam ratio |
 |---|---|---|---|---|---|
@@ -441,6 +444,30 @@ for the second reference seed, and the flicker score is flat at 0.0037–0.0039 
 Node time depends only on the step count (48.0–48.4 s per step for all six windows); the sampler
 itself is free. The 6-step figure is the warm one — the first run after a ComfyUI restart carries
 about 180 s of one-off model loading inside its first sampling call.
+
+**Window-to-window consistency, measured** (2026-09-21). The seam statistics above say the
+cross-fade is smooth; they do not say that the windows agree on *what* they reconstruct. Watched
+as a video, the 99-frame sequence without a window reference shows the sunlit foliage behind the
+glass fade into a different reconstruction with every window — each window is sampled on its own
+and only the decoded frames are blended. `use_prev_window_reference` hands every window the
+previous window's output frame at the next window's start as its VACE reference image; it is now
+on by default. Same clip, `fast` / 20 steps / seed 34, per-window outputs captured before the blend:
+
+| | without reference | with `use_prev_window_reference` |
+|---|---|---|
+| agreement of neighbouring windows over their shared frames (masked log PSNR, mean / worst) | 28.7 / 24.8 dB | 34.4 / 30.8 dB |
+| masked mean log, frame 0 → 96 | −15.8 % | −4.6 % |
+| masked PSNR against the 50-step run with the reference | 28.7 dB | 43.8 dB |
+| node time | 1114 s | 1137 s |
+
+The reference keeps the foliage for the whole clip and holds the 20-step result within 43.8 dB of
+the 50-step one; the remaining 31–38 dB disagreement between neighbouring windows grows slowly
+towards the end of the clip, so on very long shots the background can still drift. Two alternatives
+were measured on the same clip and rejected: a fixed reference from the first window, and joint
+denoising of all windows with ComfyUI's native context windows (FreeNoise, pyramid fusion). The
+latter removed the hand-offs entirely and was 11 % faster, but averaging five overlapping windows at
+every sampling step flattened the reconstruction to a featureless haze (masked p99.9 of 5 against
+30–60 for the blended runs), at 50 steps as well as at 20.
 
 For a *creative*, deliberately unfaithful look, `workflows/experimental/` holds two graphs that
 put a Wan 2.1 turbo LoRA in front of the node. On the same 99 frames, FastWan rank 64 at strength
@@ -619,8 +646,9 @@ windows.
   `shift` (default 8.0 — the last three only honoured when `preset` is `custom`),
   `mask_overexposed`, `mask_underexposed`, `window_size` (frames per window,
   4n+1, default 33 — the training length), `window_stride` (frames between window starts, default
-  16), `use_prev_window_reference` (temporal consistency across windows for long videos),
-  `attention`, `vae_precision`.
+  16), `use_prev_window_reference` (default on — each window gets the previous window's output
+  frame as its reference image, so the reconstructed content stays the same along the clip; off
+  reconstructs every window on its own), `attention`, `vae_precision`.
 - **Outputs**: `hdr` (linear scene-referred HDR image/batch), `mask` (regenerated regions).
 
 ### DiffHDR HDRI (Panorama) — `DiffHDRPano`
@@ -734,6 +762,10 @@ Writes linear HDR as OpenEXR (single file or frame sequence) or Radiance `.hdr`.
   and the default `window_size=33` match that training distribution most closely. Other sizes and
   window lengths work but are extrapolating beyond the training distribution.
 - `window_size` must be `4n+1`; `window_stride` must be smaller than `window_size`.
+- Long clips are still sampled window by window. `use_prev_window_reference` keeps the
+  reconstructed content of the clipped regions consistent from window to window, but each window
+  remains its own sample: on very long shots the background can drift slowly, and turning the
+  option off makes every window invent its own version.
 - Long clips cost host RAM in proportion to their length. At 1280×720 a frame needs about
   **37 MB of system RAM** while the node runs — roughly 26 MB of it allocated by DiffHDR
   itself (log-encoded control frames, mask, HDR output buffer) plus the ~11 MB input IMAGE

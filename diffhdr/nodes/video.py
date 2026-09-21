@@ -36,7 +36,7 @@ class DiffHDRVideo(io.ComfyNode):
                 io.Boolean.Input("mask_underexposed", default=False, tooltip="Also detect and regenerate under-exposed (crushed) regions."),
                 io.Int.Input("window_size", default=33, min=5, max=129, step=4, tooltip="Frames per window (4n+1). 33 is the training length."),
                 io.Int.Input("window_stride", default=16, min=1, max=128, tooltip="Frames between window starts for long videos. Must be smaller than window_size."),
-                io.Boolean.Input("use_prev_window_reference", default=False, tooltip="Long videos: use the previous window's output as reference for temporal consistency."),
+                io.Boolean.Input("use_prev_window_reference", default=True, tooltip="Long videos: feed each sliding window the previous window's output frame (at the next window's start) as its reference image, so the windows reconstruct the same content in the clipped regions. Measured to reduce the window-to-window change of the reconstructed background a lot. Off: every window is reconstructed on its own and the blend can visibly cross-fade between different reconstructions."),
                 *common.system_inputs(),
             ],
             outputs=common.hdr_outputs(),
