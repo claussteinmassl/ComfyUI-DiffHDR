@@ -19,6 +19,7 @@ class DiffHDRPano(io.ComfyNode):
             category=common.CATEGORY,
             description="Reconstructs an HDR environment map from a clipped LDR equirectangular panorama using the DiffHDR panorama LoRA.",
             inputs=[
+                common.preset_input(),
                 *common.model_inputs(),
                 io.Image.Input("image", tooltip="sRGB equirectangular panorama (2:1). Only the first image of a batch is used."),
                 common.clip_input(),
@@ -27,14 +28,16 @@ class DiffHDRPano(io.ComfyNode):
                 io.Int.Input("width", default=2048, min=16, max=8192, step=16, tooltip="Processing width. The panorama is stretched, not cropped."),
                 io.Int.Input("height", default=1024, min=16, max=8192, step=16, tooltip="Processing height."),
                 *common.sampler_inputs(default_seed=42),
+                *common.sampling_inputs(),
                 *common.system_inputs(),
             ],
             outputs=common.hdr_outputs(),
         )
 
     @classmethod
-    def execute(cls, model, vae, image, prompt, width, height, steps, seed, attention, vae_precision,
-                clip=None, mask=None) -> io.NodeOutput:
+    def execute(cls, preset, model, vae, image, prompt, width, height, steps, seed, sampler, scheduler,
+                shift, attention, vae_precision, clip=None, mask=None) -> io.NodeOutput:
+        settings = sampling.resolve_settings(preset, sampler, scheduler, shift)
         timer = timing.StageTimer()
         with timer.stage("prepare"):
             dvae.check_wan_vae(vae)
@@ -46,9 +49,9 @@ class DiffHDRPano(io.ComfyNode):
         with timer.stage("conditioning"):
             positive, negative = embeddings.get_conditioning(clip, prompt, "pano")
         with timer.stage("model_patch"):
-            patched = sampling.prepare_model(model, "pano", attention)
+            patched = sampling.prepare_model(model, "pano", attention, shift=settings.shift)
         window_fn = backend.make_window_fn(patched, dvae.get_vae(vae, vae_precision), positive, negative,
-                                           steps, seed, on_step=lambda: pbar.update(1), timer=timer)
+                                           steps, seed, settings, on_step=lambda: pbar.update(1), timer=timer)
         result = pipeline.run_pano(image, window_fn, user_mask=mask, timer=timer)
         timing.log_timing(timing.node_context("pano", 1, 1, steps), timer)
         return io.NodeOutput(result.hdr, result.mask)

@@ -11,4 +11,8 @@ if not __package__ or importlib.util.find_spec("comfy_api") is None:
 else:
     from .diffhdr.nodes import comfy_entrypoint
 
-__all__ = ["comfy_entrypoint"]
+# ``ComfyExtension`` has no hook for web assets, so the legacy module attribute is used:
+# ComfyUI reads it before it dispatches to the V3 entry point.
+WEB_DIRECTORY = "./web"
+
+__all__ = ["WEB_DIRECTORY", "comfy_entrypoint"]

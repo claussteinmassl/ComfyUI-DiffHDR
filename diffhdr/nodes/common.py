@@ -2,7 +2,8 @@
 
 from comfy_api.latest import io
 
-from .. import attention, vae as dvae
+from .. import attention, sampling
+from .. import vae as dvae
 
 CATEGORY = "DiffHDR"
 
@@ -18,10 +19,33 @@ def clip_input():
     return io.Clip.Input("clip", optional=True, tooltip="Optional umT5-xxl text encoder. If not connected, the bundled DiffHDR embeddings are used and the prompt is ignored.")
 
 
+PRESET_TOOLTIP = (
+    "fast = res_multistep / simple / shift 8 (recommended, measured on Wan2.1-VACE-14B: matches the "
+    "50-step reference at 10-20 steps, 4-7x faster). original = euler / simple / shift 5 (the reference "
+    "implementation's sampler). custom = use the sampler / scheduler / shift widgets below."
+)
+
+
+def preset_input():
+    """The preset dropdown, the first input of both all-in-one nodes."""
+    return io.Combo.Input("preset", options=list(sampling.PRESET_NAMES), default=sampling.DEFAULT_PRESET,
+                          tooltip=PRESET_TOOLTIP)
+
+
 def sampler_inputs(default_seed: int) -> list:
     return [
-        io.Int.Input("steps", default=50, min=1, max=200, tooltip="Sampling steps. 50 matches the reference; around 10 is reported to be comparable."),
+        io.Int.Input("steps", default=20, min=1, max=200, tooltip="Sampling steps. 20 is the tuned default; 10 is enough with the fast preset; 50 = reference-implementation default."),
         io.Int.Input("seed", default=default_seed, min=0, max=0xFFFFFFFFFFFFFFFF, control_after_generate=True, tooltip="Noise seed. Long videos use the same seed for every window."),
+    ]
+
+
+def sampling_inputs() -> list:
+    """The three advanced sampling widgets, honoured only when ``preset`` is ``custom``."""
+    fast = sampling.PRESETS[sampling.DEFAULT_PRESET]
+    return [
+        io.Combo.Input("sampler", options=list(sampling.SAMPLERS), default=fast.sampler, tooltip="Sampler, used when preset = custom. res_multistep and dpmpp_2m are equivalent and reach the 50-step reference in far fewer steps than euler."),
+        io.Combo.Input("scheduler", options=list(sampling.SCHEDULERS), default=fast.scheduler, tooltip="Scheduler, used when preset = custom. Only simple was measured; beta is deliberately not offered because it crushes highlights."),
+        io.Float.Input("shift", default=fast.shift, min=1.0, max=12.0, step=0.5, tooltip="Flow-matching shift, used when preset = custom. 8 measured best with every sampler; 5 is the reference implementation's value."),
     ]
 
 

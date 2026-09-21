@@ -164,7 +164,7 @@ def test_pipeline_without_a_timer_is_unchanged():
 
 @pytest.mark.requires_comfy
 def test_make_window_fn_times_encode_sample_decode(monkeypatch):
-    from diffhdr import backend, vace
+    from diffhdr import backend, sampling, vace
 
     def fake_build(vae, control, mask, reference):
         t = (control.shape[0] - 1) // 4 + 1
@@ -179,7 +179,7 @@ def test_make_window_fn_times_encode_sample_decode(monkeypatch):
 
     timer = timing.StageTimer()
     fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=1, seed=0,
-                                timer=timer)
+                                settings=sampling.PRESETS["fast"], timer=timer)
     fn(torch.zeros(5, 16, 16, 3), torch.zeros(5, 16, 16), None)
     assert list(timer.summary()) == ["encode", "sample", "decode"]
 
@@ -191,7 +191,7 @@ def _patch_node_deps(monkeypatch, module):
     monkeypatch.setattr(module.dvae, "check_wan_vae", lambda vae: None)
     monkeypatch.setattr(module.dvae, "get_vae", lambda vae, precision: vae)
     monkeypatch.setattr(module.embeddings, "get_conditioning", lambda clip, prompt, variant: ([], []))
-    monkeypatch.setattr(module.sampling, "prepare_model", lambda model, variant, attention: model)
+    monkeypatch.setattr(module.sampling, "prepare_model", lambda model, variant, attention, shift: model)
     monkeypatch.setattr(module.backend, "make_window_fn",
                         lambda *a, **k: (lambda control, mask, reference: control))
     monkeypatch.setattr(module.pipeline.frames, "image_mode_num_frames", lambda h, w: 5)
@@ -203,9 +203,10 @@ def test_video_node_logs_one_timing_line(monkeypatch, caplog):
 
     _patch_node_deps(monkeypatch, video)
     with caplog.at_level(logging.INFO, logger="DiffHDR"):
-        video.DiffHDRVideo.execute(model=None, vae=None, images=_clip(5), prompt="",
+        video.DiffHDRVideo.execute(preset="fast", model=None, vae=None, images=_clip(5), prompt="",
                                    reference_ev=5.0, resize_mode="native", width=32, height=16,
-                                   steps=10, seed=0, mask_overexposed=True, mask_underexposed=False,
+                                   steps=10, seed=0, sampler="res_multistep", scheduler="simple", shift=8.0,
+                                   mask_overexposed=True, mask_underexposed=False,
                                    window_size=33, window_stride=16, use_prev_window_reference=False,
                                    attention="sdpa", vae_precision="fp32")
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("DiffHDR timing")]
@@ -221,14 +222,16 @@ def test_video_node_reports_image_mode_and_window_count(monkeypatch, caplog):
 
     _patch_node_deps(monkeypatch, video)
     with caplog.at_level(logging.INFO, logger="DiffHDR"):
-        video.DiffHDRVideo.execute(model=None, vae=None, images=_clip(1), prompt="",
+        video.DiffHDRVideo.execute(preset="fast", model=None, vae=None, images=_clip(1), prompt="",
                                    reference_ev=5.0, resize_mode="native", width=32, height=16,
-                                   steps=10, seed=0, mask_overexposed=True, mask_underexposed=False,
+                                   steps=10, seed=0, sampler="res_multistep", scheduler="simple", shift=8.0,
+                                   mask_overexposed=True, mask_underexposed=False,
                                    window_size=33, window_stride=16, use_prev_window_reference=False,
                                    attention="sdpa", vae_precision="fp32")
-        video.DiffHDRVideo.execute(model=None, vae=None, images=_clip(65), prompt="",
+        video.DiffHDRVideo.execute(preset="fast", model=None, vae=None, images=_clip(65), prompt="",
                                    reference_ev=5.0, resize_mode="native", width=32, height=16,
-                                   steps=10, seed=0, mask_overexposed=True, mask_underexposed=False,
+                                   steps=10, seed=0, sampler="res_multistep", scheduler="simple", shift=8.0,
+                                   mask_overexposed=True, mask_underexposed=False,
                                    window_size=33, window_stride=16, use_prev_window_reference=False,
                                    attention="sdpa", vae_precision="fp32")
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("DiffHDR timing")]
@@ -243,9 +246,9 @@ def test_pano_node_logs_one_timing_line(monkeypatch, caplog):
 
     _patch_node_deps(monkeypatch, hdri)
     with caplog.at_level(logging.INFO, logger="DiffHDR"):
-        hdri.DiffHDRPano.execute(model=None, vae=None, image=_clip(1, 32, 64), prompt="",
-                                 width=64, height=32, steps=10, seed=0,
-                                 attention="sdpa", vae_precision="fp32")
+        hdri.DiffHDRPano.execute(preset="fast", model=None, vae=None, image=_clip(1, 32, 64), prompt="",
+                                 width=64, height=32, steps=10, seed=0, sampler="res_multistep",
+                                 scheduler="simple", shift=8.0, attention="sdpa", vae_precision="fp32")
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("DiffHDR timing")]
     assert len(lines) == 1
     assert lines[0].startswith("DiffHDR timing [pano, 1 frame, 1 window(s), 10 steps]: ")

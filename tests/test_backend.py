@@ -86,7 +86,7 @@ def test_set_shift_patches_shift_and_keeps_noise_scale():
             self.object_patches[name] = obj
 
     mp = MP()
-    sampling.set_shift(mp)
+    sampling.set_shift(mp, sampling.PRESETS["original"].shift)
     ms = mp.object_patches["model_sampling"]
     assert ms.shift == 5.0 and ms.multiplier == 1000 and ms.noise_scale == 1.5
     assert isinstance(ms, comfy.model_sampling.CONST)
@@ -97,7 +97,7 @@ def test_prepare_model_does_not_mutate_the_users_model(monkeypatch):
 
     original = _fake_patcher({"transformer_options": {"existing": 1}})
     monkeypatch.setattr(sampling.lora, "apply_lora", lambda model, variant: model.clone())
-    monkeypatch.setattr(sampling, "set_shift", lambda model, shift=sampling.SHIFT: model)
+    monkeypatch.setattr(sampling, "set_shift", lambda model, shift: model)
     monkeypatch.setattr(sampling.attention, "resolve", lambda mode, device: "OVERRIDE")
 
     patched = sampling.prepare_model(original, "standard", "sdpa")
@@ -112,7 +112,7 @@ def test_prepare_model_keeps_default_when_override_is_none(monkeypatch):
 
     original = _fake_patcher()
     monkeypatch.setattr(sampling.lora, "apply_lora", lambda model, variant: model.clone())
-    monkeypatch.setattr(sampling, "set_shift", lambda model, shift=sampling.SHIFT: model)
+    monkeypatch.setattr(sampling, "set_shift", lambda model, shift: model)
     monkeypatch.setattr(sampling.attention, "resolve", lambda mode, device: None)
 
     patched = sampling.prepare_model(original, "standard", "auto")
@@ -121,7 +121,7 @@ def test_prepare_model_keeps_default_when_override_is_none(monkeypatch):
 
 
 def test_window_fn_trims_reference(monkeypatch):
-    from diffhdr import backend, vace
+    from diffhdr import backend, sampling, vace
 
     seen = {}
 
@@ -130,7 +130,7 @@ def test_window_fn_trims_reference(monkeypatch):
         trim = 0 if reference is None else 1
         return vace.VaceCond(frames=torch.zeros(1), mask=torch.zeros(1), trim=trim, latent_shape=(1, 16, t + trim, 2, 2))
 
-    def fake_sample(model, positive, negative, latent_shape, steps, seed, callback=None):
+    def fake_sample(model, positive, negative, latent_shape, steps, seed, sampler, scheduler, callback=None):
         return torch.arange(latent_shape[2]).float().view(1, 1, -1, 1, 1).expand(latent_shape).clone()
 
     def fake_decode(vae, latent):
@@ -141,14 +141,15 @@ def test_window_fn_trims_reference(monkeypatch):
     monkeypatch.setattr(backend.vace, "apply", lambda cond, vc: cond)
     monkeypatch.setattr(backend.sampling, "sample", fake_sample)
     monkeypatch.setattr(backend.dvae, "decode", fake_decode)
-    fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=2, seed=1)
+    fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=2, seed=1,
+                                settings=sampling.PRESETS["fast"])
     out = fn(torch.zeros(9, 16, 16, 3), torch.zeros(9, 16, 16), torch.zeros(1, 16, 16, 3))
     assert out.shape == (9, 16, 16, 3)
     assert seen["latent"][0, 0, :, 0, 0].tolist() == [1.0, 2.0, 3.0]   # reference latent (index 0) removed
 
 
 def test_window_fn_without_reference_keeps_all_latents(monkeypatch):
-    from diffhdr import backend, vace
+    from diffhdr import backend, sampling, vace
 
     seen = {}
 
@@ -157,7 +158,7 @@ def test_window_fn_without_reference_keeps_all_latents(monkeypatch):
         t = (control.shape[0] - 1) // 4 + 1
         return vace.VaceCond(frames=torch.zeros(1), mask=torch.zeros(1), trim=0, latent_shape=(1, 16, t, 2, 2))
 
-    def fake_sample(model, positive, negative, latent_shape, steps, seed, callback=None):
+    def fake_sample(model, positive, negative, latent_shape, steps, seed, sampler, scheduler, callback=None):
         if callback is not None:
             for i in range(steps):
                 callback(i, None, None, steps)
@@ -174,7 +175,7 @@ def test_window_fn_without_reference_keeps_all_latents(monkeypatch):
 
     steps_seen = []
     fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=3, seed=1,
-                                on_step=lambda: steps_seen.append(1))
+                                settings=sampling.PRESETS["fast"], on_step=lambda: steps_seen.append(1))
     out = fn(torch.zeros(5, 16, 16, 3), torch.zeros(5, 16, 16), None)
     assert out.shape == (5, 16, 16, 3)
     assert seen["latent"][0, 0, :, 0, 0].tolist() == [0.0, 1.0]
@@ -183,7 +184,7 @@ def test_window_fn_without_reference_keeps_all_latents(monkeypatch):
 
 def test_window_fn_is_a_pipeline_window_fn(monkeypatch):
     """The factory result must be usable where the pipeline expects a WindowFn."""
-    from diffhdr import backend, vace
+    from diffhdr import backend, sampling, vace
 
     def fake_build(vae, control, mask, reference):
         t = (control.shape[0] - 1) // 4 + 1
@@ -198,6 +199,33 @@ def test_window_fn_is_a_pipeline_window_fn(monkeypatch):
 
     from diffhdr import pipeline
 
-    fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=1, seed=0)
+    fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=1, seed=0,
+                                settings=sampling.PRESETS["fast"])
     result = pipeline.run_video(torch.zeros(5, 16, 16, 3), fn, window_size=33, window_stride=16)
     assert result.hdr.shape == (5, 16, 16, 3)
+
+
+def test_window_fn_forwards_the_sampling_settings(monkeypatch):
+    """The window function must sample with the settings it was built with."""
+    from diffhdr import backend, sampling, vace
+
+    seen = {}
+
+    def fake_build(vae, control, mask, reference):
+        return vace.VaceCond(frames=torch.zeros(1), mask=torch.zeros(1), trim=0, latent_shape=(1, 16, 2, 2, 2))
+
+    def fake_sample(model, positive, negative, latent_shape, steps, seed, sampler, scheduler, callback=None):
+        seen.update(sampler=sampler, scheduler=scheduler, steps=steps, seed=seed)
+        return torch.zeros(latent_shape)
+
+    monkeypatch.setattr(backend.vace, "build", fake_build)
+    monkeypatch.setattr(backend.vace, "apply", lambda cond, vc: cond)
+    monkeypatch.setattr(backend.sampling, "sample", fake_sample)
+    monkeypatch.setattr(backend.dvae, "decode", lambda vae, latent: torch.zeros(5, 16, 16, 3))
+
+    settings = sampling.SamplingSettings("dpmpp_2m", "sgm_uniform", 7.5)
+    fn = backend.make_window_fn(model=None, vae=None, positive=[], negative=[], steps=4, seed=3,
+                                settings=settings)
+    fn(torch.zeros(5, 16, 16, 3), torch.zeros(5, 16, 16), None)
+
+    assert seen == {"sampler": "dpmpp_2m", "scheduler": "sgm_uniform", "steps": 4, "seed": 3}

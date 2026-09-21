@@ -74,3 +74,17 @@ def test_root_package_comfy_import():
         sys.modules.pop("ComfyUI_DiffHDR_under_test", None)
         for k, v in removed_modules.items():
             sys.modules[k] = v
+
+
+def test_web_directory_is_exported_and_exists():
+    """ComfyUI serves the preset-sync extension from ``WEB_DIRECTORY``."""
+    spec = importlib.util.spec_from_file_location(
+        "diffhdr_root_web_dir", REPO_ROOT / "__init__.py", submodule_search_locations=None)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        assert module.WEB_DIRECTORY == "./web"
+        web = REPO_ROOT / "web"
+        assert (web / "diffhdr_presets.js").is_file()
+    finally:
+        sys.modules.pop("diffhdr_root_web_dir", None)

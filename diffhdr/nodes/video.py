@@ -19,6 +19,7 @@ class DiffHDRVideo(io.ComfyNode):
             category=common.CATEGORY,
             description="Reconstructs HDR from LDR images or videos with DiffHDR. One frame = image mode, up to window_size frames = one window, more = sliding windows with blending.",
             inputs=[
+                common.preset_input(),
                 *common.model_inputs(),
                 io.Image.Input("images", tooltip="sRGB LDR image or frame batch."),
                 common.clip_input(),
@@ -30,6 +31,7 @@ class DiffHDRVideo(io.ComfyNode):
                 io.Int.Input("width", default=1280, min=16, max=8192, step=16, tooltip="Width for resize_mode=custom."),
                 io.Int.Input("height", default=720, min=16, max=8192, step=16, tooltip="Height for resize_mode=custom."),
                 *common.sampler_inputs(default_seed=10),
+                *common.sampling_inputs(),
                 io.Boolean.Input("mask_overexposed", default=True, tooltip="Detect and regenerate over-exposed (clipped) regions."),
                 io.Boolean.Input("mask_underexposed", default=False, tooltip="Also detect and regenerate under-exposed (crushed) regions."),
                 io.Int.Input("window_size", default=33, min=5, max=129, step=4, tooltip="Frames per window (4n+1). 33 is the training length."),
@@ -41,9 +43,11 @@ class DiffHDRVideo(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, model, vae, images, prompt, reference_ev, resize_mode, width, height, steps, seed,
-                mask_overexposed, mask_underexposed, window_size, window_stride, use_prev_window_reference,
-                attention, vae_precision, clip=None, mask=None, reference_image=None) -> io.NodeOutput:
+    def execute(cls, preset, model, vae, images, prompt, reference_ev, resize_mode, width, height, steps, seed,
+                sampler, scheduler, shift, mask_overexposed, mask_underexposed, window_size, window_stride,
+                use_prev_window_reference, attention, vae_precision,
+                clip=None, mask=None, reference_image=None) -> io.NodeOutput:
+        settings = sampling.resolve_settings(preset, sampler, scheduler, shift)
         timer = timing.StageTimer()
         with timer.stage("prepare"):
             dvae.check_wan_vae(vae)
@@ -62,9 +66,9 @@ class DiffHDRVideo(io.ComfyNode):
         with timer.stage("conditioning"):
             positive, negative = embeddings.get_conditioning(clip, prompt, "standard")
         with timer.stage("model_patch"):
-            patched = sampling.prepare_model(model, "standard", attention)
+            patched = sampling.prepare_model(model, "standard", attention, shift=settings.shift)
         window_fn = backend.make_window_fn(patched, dvae.get_vae(vae, vae_precision), positive, negative,
-                                           steps, seed, on_step=lambda: pbar.update(1), timer=timer)
+                                           steps, seed, settings, on_step=lambda: pbar.update(1), timer=timer)
         # The clip is resized inside the pipeline (fit_to) so that this node never holds a
         # second full-size copy of it while the windows are sampled.
         result = pipeline.run_video(images, window_fn, user_mask=mask, mask_overexposed=mask_overexposed,
