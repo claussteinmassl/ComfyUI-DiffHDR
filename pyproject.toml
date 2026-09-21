@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = ["OpenEXR>=3.3", "huggingface_hub"]
 
 [project.urls]
-Repository = "https://github.com/cs-agentic/ComfyUI-DiffHDR"
+Repository = "https://github.com/claussteinmassl/ComfyUI-DiffHDR"
 
 [tool.comfy]
 PublisherId = "claussteinmassl"
