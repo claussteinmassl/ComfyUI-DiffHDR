@@ -1,0 +1,25 @@
+name: Publish to ComfyUI Registry
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'claussteinmassl' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install comfy-cli
+      - run: comfy node publish --token "$COMFY_API_KEY"
+        env:
+          COMFY_API_KEY: ${{ secrets.COMFY_API_KEY }}
