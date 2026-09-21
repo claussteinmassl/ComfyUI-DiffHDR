@@ -4,10 +4,11 @@ Turn clipped 8-bit footage into linear, scene-referred HDR inside ComfyUI. This 
 port of [DiffHDR](https://github.com/Eyeline-Labs/DiffHDR) (Eyeline Labs) onto ComfyUI's native
 Wan2.1-VACE-14B objects — no VACE fork, no bundled inference engine.
 
-![LDR input against the reconstructed HDR shown four stops down](assets/readme/hero.jpg)
+![The clipped LDR input, the same input four stops down, and the DiffHDR reconstruction four stops down](assets/readme/hero.jpg)
 
-*One frame of the demo clip. Left: the clipped LDR input. Right: the reconstructed HDR displayed at
-−4 EV — the windows that were flat white now hold their tracery and the view outside.*
+*One frame of the demo dance sequence. Left: the clipped LDR input. Middle: the same input pulled
+down four stops — the window is a flat white shape, there is nothing to recover. Right: the DiffHDR
+reconstruction at the same −4 EV, with the sky and the trees outside the window back.*
 
 ## What it is
 
