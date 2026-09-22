@@ -67,11 +67,23 @@ def test_colorspaces(tmp_path):
     assert _read(p2)[0]["acesImageContainerFlag"] == 1
 
 
+def _read_hdr(path) -> np.ndarray:
+    """Decodes an uncompressed RGBE file written by ``exr.write_hdr`` into linear float32."""
+    data = np.fromfile(str(path), dtype=np.uint8).tobytes()
+    head, _, rest = data.partition(b"\n\n")
+    res_line, _, body = rest.partition(b"\n")
+    parts = res_line.split()
+    h, w = int(parts[1]), int(parts[3])
+    rgbe = np.frombuffer(body, dtype=np.uint8).reshape(h, w, 4).astype(np.float32)
+    scale = np.where(rgbe[..., 3] == 0, 0.0, np.ldexp(1.0, rgbe[..., 3].astype(np.int32) - 136))
+    return (rgbe[..., :3] + 0.5) * scale[..., None]
+
+
 def test_hdr_roundtrip(tmp_path):
     img = torch.from_numpy(np.geomspace(0.01, 1000, 32 * 32 * 3, dtype=np.float32).reshape(32, 32, 3))
     p = tmp_path / "x.hdr"
     exr.write_hdr(p, img)
-    back = exr.read_hdr(p)
+    back = _read_hdr(p)
     assert np.allclose(back, img.numpy(), rtol=0.01)
 
 

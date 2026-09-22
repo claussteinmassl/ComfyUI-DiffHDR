@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## 0.3.2 — 2026-09-22
+
+### Fixed
+
+- The package published to the ComfyUI registry no longer contains the test suite, the
+  development scripts and the CI workflows (`.comfyignore`), and the test-only Radiance reader
+  moved out of the runtime module. Both were reported by the registry's automated scan and kept
+  the previous versions from being installable through the Manager.
+
 ## 0.3.1 — 2026-09-22
 
 ### Fixed

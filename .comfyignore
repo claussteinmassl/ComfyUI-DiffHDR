@@ -1,0 +1,7 @@
+# Files that are not part of the runtime package published to the ComfyUI registry.
+tests/
+scripts/
+.github/
+requirements-dev.txt
+.gitignore
+.comfyignore

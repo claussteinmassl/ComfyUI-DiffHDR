@@ -82,18 +82,6 @@ def write_hdr(path, image: torch.Tensor) -> None:
         f.write(rgbe.tobytes())
 
 
-def read_hdr(path) -> np.ndarray:
-    """Reads an uncompressed RGBE file written by :func:`write_hdr` (used by tests)."""
-    data = Path(path).read_bytes()
-    head, _, rest = data.partition(b"\n\n")
-    res_line, _, body = rest.partition(b"\n")
-    parts = res_line.split()
-    h, w = int(parts[1]), int(parts[3])
-    rgbe = np.frombuffer(body, dtype=np.uint8).reshape(h, w, 4).astype(np.float32)
-    scale = np.where(rgbe[..., 3] == 0, 0.0, np.ldexp(1.0, rgbe[..., 3].astype(np.int32) - 136))
-    return (rgbe[..., :3] + 0.5) * scale[..., None]
-
-
 def sequence_paths(folder, prefix: str, counter: int, count: int, start_frame: int, ext: str) -> list[Path]:
     """Output paths: one file ``<prefix>_<counter>.<ext>`` or a folder of zero-padded frames.
 

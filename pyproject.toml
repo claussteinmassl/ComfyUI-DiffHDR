@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-diffhdr"
 description = "DiffHDR (LDR to HDR reconstruction for images, videos and HDRI panoramas) on ComfyUI's native Wan2.1-VACE."
-version = "0.3.1"
+version = "0.3.2"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = ["OpenEXR>=3.3", "huggingface_hub"]
