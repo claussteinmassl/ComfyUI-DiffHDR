@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-HF_REPO = "ZhengmingYu/DiffHDR"
+HF_REPO = "Eyeline-Labs/DiffHDR"
 LORA_FILES = {"standard": "DiffHDR.safetensors", "pano": "DiffHDR_Pano.safetensors"}
 LORA_SIZE = 61_360_760
 EXPECTED_PATCHES = 80

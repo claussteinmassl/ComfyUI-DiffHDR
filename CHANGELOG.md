@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## 0.3.1 — 2026-09-22
+
+### Fixed
+
+- The DiffHDR LoRAs are downloaded from
+  [`Eyeline-Labs/DiffHDR`](https://huggingface.co/Eyeline-Labs/DiffHDR); the previous Hugging Face
+  location no longer answers. Same file names, checksums verified against the new repository, same
+  160 LoRA tensors on the eight VACE blocks.
+
 ## 0.3.0 — 2026-09-21
 
 ### Changed

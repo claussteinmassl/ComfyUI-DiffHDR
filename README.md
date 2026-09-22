@@ -40,7 +40,7 @@ as seven native `DiffHDR*` nodes that plug into stock `UNETLoader` / `VAELoader`
 | Wan2.1 VACE 14B GGUF (low memory / Apple Silicon) | e.g. `Wan2.1_14B_VACE-Q4_K_M.gguf`, `Q5_K_M`, `Q8_0` | [`QuantStack/Wan2.1_14B_VACE-GGUF`](https://huggingface.co/QuantStack/Wan2.1_14B_VACE-GGUF) — requires the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom node (`UnetLoaderGGUF` in place of `UNETLoader`) | `models/diffusion_models` |
 | Wan 2.1 VAE | `wan_2.1_vae.safetensors` | same Comfy-Org repo ([`split_files/vae/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/vae)) | `models/vae` |
 | umT5-xxl (**optional** — only for custom prompts) | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | same Comfy-Org repo ([`split_files/text_encoders/`](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/tree/main/split_files/text_encoders)) | `models/text_encoders` |
-| DiffHDR LoRAs | `DiffHDR.safetensors` (image/video), `DiffHDR_Pano.safetensors` (HDRI) | [`ZhengmingYu/DiffHDR`](https://huggingface.co/ZhengmingYu/DiffHDR) — downloaded automatically | `models/loras/DiffHDR` |
+| DiffHDR LoRAs | `DiffHDR.safetensors` (image/video), `DiffHDR_Pano.safetensors` (HDRI) | [`Eyeline-Labs/DiffHDR`](https://huggingface.co/Eyeline-Labs/DiffHDR) — downloaded automatically | `models/loras/DiffHDR` |
 
 Wan2.1-VACE-14B and the Wan 2.1 VAE are the same checkpoints any native ComfyUI VACE workflow uses.
 **The DiffHDR LoRA is fetched automatically** the first time a DiffHDR node runs. All filenames
@@ -817,7 +817,7 @@ integration of:
   itself builds on.
 - **[Wan 2.1](https://github.com/Wan-Video/Wan2.1)** (Apache-2.0), the underlying video diffusion
   model, used here through ComfyUI's native Wan2.1-VACE-14B support.
-- The **[DiffHDR LoRA weights](https://huggingface.co/ZhengmingYu/DiffHDR)** (Apache-2.0) are
+- The **[DiffHDR LoRA weights](https://huggingface.co/Eyeline-Labs/DiffHDR)** (Apache-2.0) are
   downloaded at runtime and are not part of this repository.
 
 See `NOTICE` for the full attribution.

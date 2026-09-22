@@ -37,7 +37,7 @@ def test_ensure_lora_download_failure(tmp_path, monkeypatch):
         raise OSError("offline")
 
     monkeypatch.setattr(lora, "_download", boom)
-    with pytest.raises(RuntimeError, match="huggingface.co/ZhengmingYu/DiffHDR"):
+    with pytest.raises(RuntimeError, match="huggingface.co/Eyeline-Labs/DiffHDR"):
         lora.ensure_lora("pano")
 
 
