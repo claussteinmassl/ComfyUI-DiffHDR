@@ -176,7 +176,7 @@
       ],
       "size": [
         400,
-        620
+        668
       ],
       "flags": {},
       "order": 3,
@@ -382,6 +382,24 @@
             "name": "vae_precision"
           },
           "link": null
+        },
+        {
+          "localized_name": "overexposed_threshold",
+          "name": "overexposed_threshold",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overexposed_threshold"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "underexposed_threshold",
+          "name": "underexposed_threshold",
+          "type": "FLOAT",
+          "widget": {
+            "name": "underexposed_threshold"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -423,7 +441,9 @@
         16,
         true,
         "auto",
-        "fp32"
+        "fp32",
+        0.95,
+        0.01
       ],
       "widgets_values_named": {
         "preset": "fast",
@@ -444,7 +464,9 @@
         "window_stride": 16,
         "use_prev_window_reference": true,
         "attention": "auto",
-        "vae_precision": "fp32"
+        "vae_precision": "fp32",
+        "overexposed_threshold": 0.95,
+        "underexposed_threshold": 0.01
       }
     },
     {

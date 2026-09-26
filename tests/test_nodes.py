@@ -188,3 +188,64 @@ def test_prev_window_reference_is_on_by_default_and_explained():
     widget = inputs["use_prev_window_reference"]
     assert widget.default is True
     assert "previous window" in widget.tooltip and "own" in widget.tooltip
+
+
+THRESHOLD_WIDGETS = {"DiffHDRVideo": ["overexposed_threshold", "underexposed_threshold"],
+                     "DiffHDRPreprocess": ["overexposed_threshold", "underexposed_threshold"],
+                     "DiffHDRPano": ["overexposed_threshold"]}
+
+
+@pytest.mark.parametrize("node_id", THRESHOLD_WIDGETS)
+def test_threshold_widgets_are_appended_last(node_id):
+    """Appended, so saved workflows (positional widgets_values) keep loading unchanged."""
+    from diffhdr import masks
+    inputs = _schemas()[node_id].inputs
+    names = THRESHOLD_WIDGETS[node_id]
+    assert [inp.id for inp in inputs[-len(names):]] == names
+    by_id = _inputs(_schemas()[node_id])
+    assert by_id["overexposed_threshold"].default == masks.OVER_THR
+    assert "mask" in by_id["overexposed_threshold"].tooltip
+    if "underexposed_threshold" in by_id:
+        assert by_id["underexposed_threshold"].default == masks.UNDER_THR
+
+
+def test_preprocess_node_uses_the_thresholds():
+    from diffhdr.nodes.preprocess import DiffHDRPreprocess
+    img = torch.full((3, 48, 64, 3), 0.4)
+    img[:, 4:24, 4:28] = 0.85
+    img[:, 24:44, 36:60] = 0.04
+    _, default = _out(DiffHDRPreprocess.execute(img, "video", True, True))
+    _, moved = _out(DiffHDRPreprocess.execute(img, "video", True, True, overexposed_threshold=0.8,
+                                              underexposed_threshold=0.06))
+    assert default.max() == 0.0
+    assert moved[:, 8:20, 8:24].min() == 1.0 and moved[:, 28:40, 40:56].min() == 1.0
+    _, pano = _out(DiffHDRPreprocess.execute(img, "pano", True, False, overexposed_threshold=0.8))
+    assert pano[:, 8:20, 8:24].min() == 1.0
+
+
+def test_video_and_pano_nodes_forward_the_thresholds(monkeypatch):
+    from diffhdr import embeddings, pipeline
+    from diffhdr import vae as dvae
+    from diffhdr.nodes.hdri import DiffHDRPano
+    _capture(monkeypatch)
+    monkeypatch.setattr(dvae, "check_wan_vae", lambda vae: None)
+    monkeypatch.setattr(dvae, "get_vae", lambda vae, precision: vae)
+    monkeypatch.setattr(embeddings, "get_conditioning", lambda clip, prompt, variant: ([], []))
+    calls = {}
+    result = pipeline.Result(torch.zeros(1, 16, 16, 3), torch.zeros(1, 16, 16))
+    monkeypatch.setattr(pipeline, "run_video", lambda *a, **k: (calls.__setitem__("video", k), result)[1])
+    monkeypatch.setattr(pipeline, "run_pano", lambda *a, **k: (calls.__setitem__("pano", k), result)[1])
+
+    from diffhdr.nodes.video import DiffHDRVideo
+    DiffHDRVideo.execute(
+        preset="fast", model=object(), vae=object(), images=torch.zeros(1, 16, 16, 3), prompt="",
+        reference_ev=5.0, resize_mode="native", width=16, height=16, steps=20, seed=10,
+        sampler="euler", scheduler="simple", shift=5.0, mask_overexposed=True, mask_underexposed=True,
+        window_size=33, window_stride=16, use_prev_window_reference=False, attention="sdpa",
+        vae_precision="fp32", overexposed_threshold=0.8, underexposed_threshold=0.05)
+    DiffHDRPano.execute(preset="fast", model=object(), vae=object(), image=torch.zeros(1, 32, 64, 3),
+                        prompt="", width=64, height=32, steps=20, seed=42, sampler="euler",
+                        scheduler="simple", shift=3.0, attention="sdpa", vae_precision="fp32",
+                        overexposed_threshold=0.9)
+    assert calls["video"]["over_threshold"] == 0.8 and calls["video"]["under_threshold"] == 0.05
+    assert calls["pano"]["over_threshold"] == 0.9

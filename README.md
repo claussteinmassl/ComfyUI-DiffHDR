@@ -100,6 +100,15 @@ encode a prompt of your own. The inputs that matter:
   regenerated. The optional `mask` input overrides the automatic detection entirely, and
   `reference_image` (boosted by `reference_ev`, default 5 stops) guides the content of clipped
   regions.
+- **Thresholds** — the last two widgets set where the detection starts.
+  `overexposed_threshold` (sRGB luma, default 0.95 = DiffHDR's value) only regenerates (nearly)
+  clipped highlights; lower it, e.g. to 0.85, to also rebuild bright highlights that still hold some
+  detail. The model sees that detail inside the mask and extends it instead of inventing from
+  nothing. `underexposed_threshold` (default 0.01) does the same for shadows when
+  `mask_underexposed` is on; only pixels below 0.01 are painted mid-grey, so darker detail above
+  that still reaches the model. DiffHDR was trained with the default values: the further you move
+  them, the more correctly exposed content gets reinvented. Tune them while watching the `mask`
+  output.
 - **Long video** — clips longer than `window_size` (4n+1, default 33 = the training length) are
   processed as sliding windows starting every `window_stride` frames (default 16) and blended.
   Every window is sampled on its own, so left alone each one invents its own version of the clipped
@@ -657,7 +666,8 @@ windows.
   4n+1, default 33 — the training length), `window_stride` (frames between window starts, default
   16), `use_prev_window_reference` (default on — each window gets the previous window's output
   frame as its reference image, so the reconstructed content stays the same along the clip; off
-  reconstructs every window on its own), `attention`, `vae_precision`.
+  reconstructs every window on its own), `attention`, `vae_precision`, `overexposed_threshold`
+  (default 0.95), `underexposed_threshold` (default 0.01).
 - **Outputs**: `hdr` (linear scene-referred HDR image/batch), `mask` (regenerated regions).
 
 ### DiffHDR HDRI (Panorama) — `DiffHDRPano`
@@ -670,7 +680,8 @@ DiffHDR panorama LoRA.
   used), `clip` (optional), `prompt` (defaults to the training prompt, only used with `clip`
   connected), `mask` (optional), `width` (default 2048), `height` (default 1024 — the panorama is
   stretched to this size, not cropped), `steps` (default 20), `seed`, `sampler`, `scheduler`,
-  `shift` (only honoured when `preset` is `custom`), `attention`, `vae_precision`.
+  `shift` (only honoured when `preset` is `custom`), `attention`, `vae_precision`,
+  `overexposed_threshold` (default 0.95).
 - **Outputs**: `hdr`, `mask`.
 
 ### DiffHDR Apply LoRA — `DiffHDRApplyLora`
@@ -688,7 +699,8 @@ reference implementation's setting.
 Builds the log-encoded control video and regeneration mask for a native `WanVaceToVideo` graph.
 
 - **Inputs**: `images` (sRGB LDR frames, sized to multiples of 16), `variant` (`video` / `pano`
-  mask detector), `mask_overexposed`, `mask_underexposed`.
+  mask detector), `mask_overexposed`, `mask_underexposed`, `overexposed_threshold` (default 0.95,
+  both variants), `underexposed_threshold` (default 0.01, `video` variant).
 - **Outputs**: `control_video` (log-encoded frames, feed to `WanVaceToVideo.control_video`),
   `control_masks` (feed to `WanVaceToVideo.control_masks`).
 

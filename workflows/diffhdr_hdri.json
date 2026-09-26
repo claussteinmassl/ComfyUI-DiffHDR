@@ -176,7 +176,7 @@
       ],
       "size": [
         400,
-        432
+        456
       ],
       "flags": {},
       "order": 3,
@@ -312,6 +312,15 @@
             "name": "vae_precision"
           },
           "link": null
+        },
+        {
+          "localized_name": "overexposed_threshold",
+          "name": "overexposed_threshold",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overexposed_threshold"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -346,7 +355,8 @@
         "simple",
         8,
         "auto",
-        "fp32"
+        "fp32",
+        0.95
       ],
       "widgets_values_named": {
         "preset": "fast",
@@ -360,7 +370,8 @@
         "scheduler": "simple",
         "shift": 8,
         "attention": "auto",
-        "vae_precision": "fp32"
+        "vae_precision": "fp32",
+        "overexposed_threshold": 0.95
       }
     },
     {

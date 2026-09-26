@@ -2,7 +2,7 @@
 
 from comfy_api.latest import io
 
-from .. import attention, sampling
+from .. import attention, masks, sampling
 from .. import vae as dvae
 
 CATEGORY = "DiffHDR"
@@ -53,6 +53,39 @@ def system_inputs() -> list:
     return [
         io.Combo.Input("attention", options=list(attention.ATTENTION_MODES), default="auto", tooltip="auto: SageAttention, then flash-attn if installed, else ComfyUI's default. Unavailable backends fall back to PyTorch SDPA. SageAttention is quantised attention: choose sdpa or flash_attn for bit-reproducible results."),
         io.Combo.Input("vae_precision", options=list(dvae.VAE_PRECISIONS), default="fp32", tooltip="fp32 is recommended. as_loaded saves memory but can cause banding in highlights."),
+    ]
+
+
+OVER_THRESHOLD_TOOLTIP = (
+    "Brightness (sRGB luma, 0-1) above which highlights are regenerated. 0.95 = DiffHDR default: only "
+    "(nearly) clipped areas. Lower it, e.g. to 0.85, to also rebuild bright highlights that still hold "
+    "some detail; the model sees that detail and extends it. Too low and correctly exposed areas get "
+    "reinvented. Check the mask output while tuning."
+)
+UNDER_THRESHOLD_TOOLTIP = (
+    "Level (sRGB, 0-1) below which shadows are regenerated, used when mask_underexposed is on. "
+    "0.01 = DiffHDR default: only crushed blacks. Raise it, e.g. to 0.05, to also rebuild dark shadows. "
+    "Only pixels below 0.01 are painted grey; darker detail above that stays visible to the model. "
+    "Check the mask output while tuning."
+)
+
+
+def over_threshold_input():
+    """The over-exposure threshold widget, appended after all older widgets."""
+    return io.Float.Input("overexposed_threshold", default=masks.OVER_THR, min=0.5, max=1.0, step=0.01,
+                          tooltip=OVER_THRESHOLD_TOOLTIP)
+
+
+def threshold_inputs() -> list:
+    """Over- and under-exposure threshold widgets, appended after all older widgets.
+
+    ComfyUI stores widget values by position, so new widgets go last: saved workflows
+    then keep loading with their old values and get the defaults for these.
+    """
+    return [
+        over_threshold_input(),
+        io.Float.Input("underexposed_threshold", default=masks.UNDER_THR, min=0.0, max=0.5, step=0.01,
+                       tooltip=UNDER_THRESHOLD_TOOLTIP),
     ]
 
 

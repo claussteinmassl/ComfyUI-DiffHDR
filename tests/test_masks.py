@@ -128,3 +128,77 @@ def test_unrequested_mask_costs_no_memory():
     assert out.under.shape == (5, 48, 64) and float(out.under.abs().sum()) == 0.0
     assert out.under.numel() * out.under.element_size() > out.under.untyped_storage().nbytes()
     assert out.combined is out.over          # no separate copy when only one mask is used
+
+
+def _patches(value_a, value_b, frames=3, h=48, w=64):
+    """Mid-grey clip with two uniform 20x24 patches at sRGB ``value_a`` and ``value_b``."""
+    x = torch.full((frames, h, w, 3), 0.4)
+    x[:, 4:24, 4:28] = value_a
+    x[:, 24:44, 36:60] = value_b
+    return x
+
+
+def test_default_thresholds_are_the_reference_values():
+    clip = _clip()
+    default = masks.video_masks(clip, use_over=True, use_under=True)
+    explicit = masks.video_masks(clip, use_over=True, use_under=True,
+                                 over_threshold=masks.OVER_THR, under_threshold=masks.UNDER_THR)
+    assert torch.equal(default.over, explicit.over) and torch.equal(default.under, explicit.under)
+    assert masks.pano_mask(clip[0]).equal(masks.pano_mask(clip[0], over_thr=masks.OVER_THR))
+
+
+def test_lower_over_threshold_catches_nearly_clipped_highlights():
+    clip = _patches(0.85, 1.0)
+    default = masks.video_masks(clip, use_over=True, use_under=False)
+    lowered = masks.video_masks(clip, use_over=True, use_under=False, over_threshold=0.8)
+    assert default.over[:, 8:20, 8:24].max() == 0.0          # 0.85 is not clipped by default
+    assert lowered.over[:, 8:20, 8:24].min() == 1.0
+    assert torch.all(lowered.over >= default.over)            # a lower threshold only adds
+
+
+def test_over_threshold_moves_the_channel_clip_term_too():
+    """At 1.0 only truly clipped pixels count; the fixed 0.98 channel test must follow."""
+    clip = _patches(0.985, 1.0)
+    default = masks.video_masks(clip, use_over=True, use_under=False)
+    strict = masks.video_masks(clip, use_over=True, use_under=False, over_threshold=1.0)
+    assert default.over[:, 8:20, 8:24].min() == 1.0
+    assert strict.over[:, 8:20, 8:24].max() == 0.0
+    assert strict.over[:, 28:40, 40:56].min() == 1.0          # pure white stays masked
+
+
+def test_higher_under_threshold_catches_nearly_crushed_shadows():
+    clip = _patches(0.04, 0.0)
+    default = masks.video_masks(clip, use_over=False, use_under=True)
+    raised = masks.video_masks(clip, use_over=False, use_under=True, under_threshold=0.06)
+    assert default.under[:, 8:20, 8:24].max() == 0.0
+    assert raised.under[:, 8:20, 8:24].min() == 1.0
+    assert torch.all(raised.under >= default.under)
+
+
+def test_only_truly_crushed_pixels_are_painted():
+    """The paint mask stays at the reference threshold so shadow detail reaches the model."""
+    clip = _patches(0.04, 0.0)
+    default = masks.video_masks(clip, use_over=False, use_under=True)
+    raised = masks.video_masks(clip, use_over=False, use_under=True, under_threshold=0.06)
+    assert default.paint is default.under
+    assert torch.equal(raised.paint, default.under)
+    lowered = masks.video_masks(clip, use_over=False, use_under=True, under_threshold=0.0)
+    assert torch.all(lowered.paint <= lowered.under)           # never paint what is kept
+    painted = masks.paint_underexposed(clip, raised.paint)
+    assert torch.equal(painted[:, 8:20, 8:24], clip[:, 8:20, 8:24])
+    assert torch.all(painted[:, 28:40, 40:56] == 0.5)
+
+
+def test_paint_is_empty_without_under_detection():
+    out = masks.video_masks(_clip(), use_over=True, use_under=False)
+    assert float(out.paint.abs().sum()) == 0.0
+
+
+def test_pano_threshold():
+    img = torch.full((32, 64, 3), 0.4)
+    img[4:12, 8:24] = 0.85
+    img[20:28, 40:56] = 0.985
+    assert masks.pano_mask(img)[6:10, 10:22].max() == 0.0
+    assert masks.pano_mask(img, over_thr=0.8)[6:10, 10:22].min() == 1.0
+    assert masks.pano_mask(img)[22:26, 42:54].min() == 1.0
+    assert masks.pano_mask(img, over_thr=1.0)[22:26, 42:54].max() == 0.0

@@ -52,7 +52,7 @@ def prepare_reference(reference: torch.Tensor, mask0: torch.Tensor, ev: float) -
     return color.lin_to_log(color.srgb_to_linear(ref) * (2.0 ** ev))
 
 
-def _prepare(images, user_mask, mask_overexposed, mask_underexposed):
+def _prepare(images, user_mask, mask_overexposed, mask_underexposed, over_threshold, under_threshold):
     """Returns ``(images, mask)`` without ever modifying the caller's tensors.
 
     Nothing is clamped here: every consumer of ``images`` clamps to [0,1] itself
@@ -62,9 +62,10 @@ def _prepare(images, user_mask, mask_overexposed, mask_underexposed):
     if user_mask is not None:
         mask = frames.pad_frames((user_mask.float() > 0.5).float(), images.shape[0])[: images.shape[0]]
         return images, mask
-    vm = masks.video_masks(images, use_over=mask_overexposed, use_under=mask_underexposed)
+    vm = masks.video_masks(images, use_over=mask_overexposed, use_under=mask_underexposed,
+                           over_threshold=over_threshold, under_threshold=under_threshold)
     if mask_underexposed:
-        images = masks.paint_underexposed(images, vm.under)
+        images = masks.paint_underexposed(images, vm.paint)
     return images, vm.combined
 
 
@@ -78,6 +79,7 @@ def _store(out: torch.Tensor, filled: int, chunk: torch.Tensor) -> int:
 
 def run_video(images: torch.Tensor, window_fn: WindowFn, *, user_mask: Optional[torch.Tensor] = None,
               mask_overexposed: bool = True, mask_underexposed: bool = False,
+              over_threshold: float = masks.OVER_THR, under_threshold: float = masks.UNDER_THR,
               reference: Optional[torch.Tensor] = None, reference_ev: float = 5.0,
               window_size: int = 33, window_stride: int = 16, use_prev_window_reference: bool = False,
               fit_to: Optional[tuple[int, int]] = None,
@@ -95,7 +97,10 @@ def run_video(images: torch.Tensor, window_fn: WindowFn, *, user_mask: Optional[
         window_fn: Generates log frames for one window.
         user_mask: Optional ``[F,H,W]`` mask overriding detection.
         mask_overexposed: Detect over-exposed regions.
-        mask_underexposed: Detect under-exposed regions and paint them to 0.5.
+        mask_underexposed: Detect under-exposed regions and paint the crushed ones to 0.5.
+        over_threshold: sRGB luma above which highlights are regenerated.
+        under_threshold: sRGB level below which shadows are regenerated. Only pixels
+            below the reference threshold are painted, see :class:`masks.VideoMasks`.
         reference: Optional ``[1,H,W,3]`` sRGB reference image.
         reference_ev: EV boost for the reference.
         window_size: Frames per window (``4k+1``).
@@ -114,7 +119,8 @@ def run_video(images: torch.Tensor, window_fn: WindowFn, *, user_mask: Optional[
         with timing.stage(timer, "resize"):
             images = frames.fit(images, fit_to[0], fit_to[1], crop=True)
     with timing.stage(timer, "masks"):
-        images, mask = _prepare(images, user_mask, mask_overexposed, mask_underexposed)
+        images, mask = _prepare(images, user_mask, mask_overexposed, mask_underexposed,
+                                over_threshold, under_threshold)
     with timing.stage(timer, "control"):
         control = encode_control(images)
         ref_log = prepare_reference(reference, mask[0], reference_ev) if reference is not None else None
@@ -150,14 +156,25 @@ def run_video(images: torch.Tensor, window_fn: WindowFn, *, user_mask: Optional[
 
 
 def run_pano(image: torch.Tensor, window_fn: WindowFn, *, user_mask: Optional[torch.Tensor] = None,
-             timer: Optional[timing.StageTimer] = None) -> Result:
-    """Runs panorama reconstruction on one equirectangular frame ``[1,H,W,3]``."""
+             over_threshold: float = masks.OVER_THR, timer: Optional[timing.StageTimer] = None) -> Result:
+    """Runs panorama reconstruction on one equirectangular frame ``[1,H,W,3]``.
+
+    Args:
+        image: ``[1,H,W,3]`` sRGB panorama at processing size.
+        window_fn: Generates log frames for the single window.
+        user_mask: Optional mask overriding detection.
+        over_threshold: sRGB luma above which highlights are regenerated.
+        timer: Optional :class:`timing.StageTimer` collecting per-stage seconds.
+
+    Returns:
+        Result with linear HDR and the mask used.
+    """
     image = image[:1].float().clamp(0, 1)
     with timing.stage(timer, "masks"):
         if user_mask is not None:
             mask = (user_mask[:1].float() > 0.5).float()
         else:
-            mask = masks.pano_mask(image[0])[None]
+            mask = masks.pano_mask(image[0], over_thr=over_threshold)[None]
     with timing.stage(timer, "control"):
         control = encode_control(image)
     with timing.stage(timer, "window"):

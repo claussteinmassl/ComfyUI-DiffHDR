@@ -3,7 +3,7 @@
 import comfy.utils
 from comfy_api.latest import io
 
-from .. import backend, embeddings, frames, pipeline, sampling, timing, windows
+from .. import backend, embeddings, frames, masks, pipeline, sampling, timing, windows
 from .. import vae as dvae
 from . import common
 
@@ -38,6 +38,7 @@ class DiffHDRVideo(io.ComfyNode):
                 io.Int.Input("window_stride", default=16, min=1, max=128, tooltip="Frames between window starts for long videos. Must be smaller than window_size."),
                 io.Boolean.Input("use_prev_window_reference", default=True, tooltip="Long videos: feed each sliding window the previous window's output frame (at the next window's start) as its reference image, so the windows reconstruct the same content in the clipped regions. Measured to reduce the window-to-window change of the reconstructed background a lot. Off: every window is reconstructed on its own and the blend can visibly cross-fade between different reconstructions."),
                 *common.system_inputs(),
+                *common.threshold_inputs(),
             ],
             outputs=common.hdr_outputs(),
         )
@@ -46,7 +47,8 @@ class DiffHDRVideo(io.ComfyNode):
     def execute(cls, preset, model, vae, images, prompt, reference_ev, resize_mode, width, height, steps, seed,
                 sampler, scheduler, shift, mask_overexposed, mask_underexposed, window_size, window_stride,
                 use_prev_window_reference, attention, vae_precision,
-                clip=None, mask=None, reference_image=None) -> io.NodeOutput:
+                clip=None, mask=None, reference_image=None, overexposed_threshold=masks.OVER_THR,
+                underexposed_threshold=masks.UNDER_THR) -> io.NodeOutput:
         settings = sampling.resolve_settings(preset, sampler, scheduler, shift)
         timer = timing.StageTimer()
         with timer.stage("prepare"):
@@ -72,7 +74,8 @@ class DiffHDRVideo(io.ComfyNode):
         # The clip is resized inside the pipeline (fit_to) so that this node never holds a
         # second full-size copy of it while the windows are sampled.
         result = pipeline.run_video(images, window_fn, user_mask=mask, mask_overexposed=mask_overexposed,
-                                    mask_underexposed=mask_underexposed, reference=reference_image,
+                                    mask_underexposed=mask_underexposed, over_threshold=overexposed_threshold,
+                                    under_threshold=underexposed_threshold, reference=reference_image,
                                     reference_ev=reference_ev, window_size=size, window_stride=window_stride,
                                     use_prev_window_reference=use_prev_window_reference, fit_to=(h, w),
                                     timer=timer)

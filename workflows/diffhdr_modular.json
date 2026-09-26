@@ -517,7 +517,7 @@
       ],
       "size": [
         280.98828125,
-        126
+        174
       ],
       "flags": {},
       "order": 10,
@@ -555,6 +555,24 @@
             "name": "mask_underexposed"
           },
           "link": null
+        },
+        {
+          "localized_name": "overexposed_threshold",
+          "name": "overexposed_threshold",
+          "type": "FLOAT",
+          "widget": {
+            "name": "overexposed_threshold"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "underexposed_threshold",
+          "name": "underexposed_threshold",
+          "type": "FLOAT",
+          "widget": {
+            "name": "underexposed_threshold"
+          },
+          "link": null
         }
       ],
       "outputs": [
@@ -581,12 +599,16 @@
       "widgets_values": [
         "video",
         true,
-        false
+        false,
+        0.95,
+        0.01
       ],
       "widgets_values_named": {
         "variant": "video",
         "mask_overexposed": true,
-        "mask_underexposed": false
+        "mask_underexposed": false,
+        "overexposed_threshold": 0.95,
+        "underexposed_threshold": 0.01
       }
     },
     {

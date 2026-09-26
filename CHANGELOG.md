@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Adjustable detection thresholds.** `overexposed_threshold` (default 0.95) on the image/video,
+  HDRI and preprocess nodes and `underexposed_threshold` (default 0.01) on the image/video and
+  preprocess nodes set where the automatic mask starts. Lowering the over-exposure threshold also
+  regenerates bright highlights that are not fully clipped yet; the model sees their remaining
+  detail and extends it. The per-channel clip test moves with the threshold. Raising the
+  under-exposure threshold regenerates dark shadows, but only pixels below the reference value are
+  painted grey, so the remaining shadow detail stays visible to the model. At the defaults the
+  masks are bit-identical to before. The new widgets are appended after all existing ones, so saved
+  workflows load unchanged.
+
 ## 0.3.2 — 2026-09-22
 
 ### Fixed

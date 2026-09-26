@@ -3,7 +3,7 @@
 import comfy.utils
 from comfy_api.latest import io
 
-from .. import backend, embeddings, frames, pipeline, sampling, timing
+from .. import backend, embeddings, frames, masks, pipeline, sampling, timing
 from .. import vae as dvae
 from . import common
 
@@ -30,13 +30,15 @@ class DiffHDRPano(io.ComfyNode):
                 *common.sampler_inputs(default_seed=42),
                 *common.sampling_inputs(),
                 *common.system_inputs(),
+                common.over_threshold_input(),
             ],
             outputs=common.hdr_outputs(),
         )
 
     @classmethod
     def execute(cls, preset, model, vae, image, prompt, width, height, steps, seed, sampler, scheduler,
-                shift, attention, vae_precision, clip=None, mask=None) -> io.NodeOutput:
+                shift, attention, vae_precision, clip=None, mask=None,
+                overexposed_threshold=masks.OVER_THR) -> io.NodeOutput:
         settings = sampling.resolve_settings(preset, sampler, scheduler, shift)
         timer = timing.StageTimer()
         with timer.stage("prepare"):
@@ -52,6 +54,7 @@ class DiffHDRPano(io.ComfyNode):
             patched = sampling.prepare_model(model, "pano", attention, shift=settings.shift)
         window_fn = backend.make_window_fn(patched, dvae.get_vae(vae, vae_precision), positive, negative,
                                            steps, seed, settings, on_step=lambda: pbar.update(1), timer=timer)
-        result = pipeline.run_pano(image, window_fn, user_mask=mask, timer=timer)
+        result = pipeline.run_pano(image, window_fn, user_mask=mask, over_threshold=overexposed_threshold,
+                                   timer=timer)
         timing.log_timing(timing.node_context("pano", 1, 1, steps), timer)
         return io.NodeOutput(result.hdr, result.mask)

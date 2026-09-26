@@ -115,3 +115,29 @@ def test_run_pano_does_not_touch_its_input():
     before = img.clone()
     pipeline.run_pano(img, Recorder())
     assert torch.equal(img, before)
+
+
+def test_run_video_passes_the_thresholds_on():
+    """A raised under threshold regenerates near-black shadows without painting them grey."""
+    seen = {}
+
+    def window_fn(control, mask, reference):
+        seen["control"], seen["mask"] = control.clone(), mask.clone()
+        return control
+
+    clip = torch.full((5, 48, 64, 3), 0.4)
+    clip[:, 4:24, 4:28] = 0.04          # dark, not crushed
+    clip[:, 24:44, 36:60] = 0.85        # bright, not clipped
+    pipeline.run_video(clip, window_fn, mask_overexposed=True, mask_underexposed=True,
+                       over_threshold=0.8, under_threshold=0.06)
+    assert seen["mask"][:, 8:20, 8:24].min() == 1.0
+    assert seen["mask"][:, 28:40, 40:56].min() == 1.0
+    expected = pipeline.encode_control(clip[:1, 8:20, 8:24])
+    assert torch.equal(seen["control"][:1, 8:20, 8:24], expected)     # detail not painted
+
+
+def test_run_pano_passes_the_threshold_on():
+    img = torch.full((1, 32, 64, 3), 0.4)
+    img[:, 4:12, 8:24] = 0.85
+    assert pipeline.run_pano(img, Recorder()).mask[0, 6:10, 10:22].max() == 0.0
+    assert pipeline.run_pano(img, Recorder(), over_threshold=0.8).mask[0, 6:10, 10:22].min() == 1.0

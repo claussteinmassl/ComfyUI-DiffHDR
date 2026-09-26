@@ -20,7 +20,8 @@ class DiffHDRPreprocess(io.ComfyNode):
                 io.Image.Input("images", tooltip="sRGB LDR frames at the final processing size (multiples of 16)."),
                 io.Combo.Input("variant", options=["video", "pano"], default="video", tooltip="Mask detector: video/image (temporally stabilised) or pano."),
                 io.Boolean.Input("mask_overexposed", default=True, tooltip="Detect over-exposed regions (video variant)."),
-                io.Boolean.Input("mask_underexposed", default=False, tooltip="Detect under-exposed regions and paint them mid-grey (video variant)."),
+                io.Boolean.Input("mask_underexposed", default=False, tooltip="Detect under-exposed regions and paint the crushed ones mid-grey (video variant)."),
+                *common.threshold_inputs(),
             ],
             outputs=[
                 io.Image.Output(display_name="control_video", tooltip="Log-encoded frames in [0,1]. Keep as float; do not route through 8-bit nodes."),
@@ -29,13 +30,16 @@ class DiffHDRPreprocess(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, images, variant, mask_overexposed, mask_underexposed) -> io.NodeOutput:
+    def execute(cls, images, variant, mask_overexposed, mask_underexposed, overexposed_threshold=masks.OVER_THR,
+                underexposed_threshold=masks.UNDER_THR) -> io.NodeOutput:
         images = images[..., :3].float().clamp(0, 1)
         if variant == "pano":
-            mask = masks.pano_mask(images[0])[None].expand(images.shape[0], -1, -1).contiguous()
+            mask = masks.pano_mask(images[0], over_thr=overexposed_threshold)[None]
+            mask = mask.expand(images.shape[0], -1, -1).contiguous()
         else:
-            vm = masks.video_masks(images, use_over=mask_overexposed, use_under=mask_underexposed)
+            vm = masks.video_masks(images, use_over=mask_overexposed, use_under=mask_underexposed,
+                                   over_threshold=overexposed_threshold, under_threshold=underexposed_threshold)
             if mask_underexposed:
-                images = masks.paint_underexposed(images, vm.under)
+                images = masks.paint_underexposed(images, vm.paint)
             mask = vm.combined
         return io.NodeOutput(pipeline.encode_control(images), mask)
